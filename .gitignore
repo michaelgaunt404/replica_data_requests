@@ -34,3 +34,22 @@ vignettes/*.pdf
 # Temporary files created by R markdown
 *.utf8.md
 *.knit.md
+
+#folders~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#example: name/ -> gets rid of folders with this name
+#example: name/** -> gets rid of all files in folder
+cache/
+data/
+output/
+public/*/
+
+#files~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#example: /name.extrension -> single file
+#example: *.extension -> all files with this extension
+#*.html
+*.RDataTmp
+*.RData
+*.zip
+*.csv
+*.xlsx
+*.pdf
