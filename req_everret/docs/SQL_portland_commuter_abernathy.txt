@@ -1,0 +1,113 @@
+--#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--#
+--# By: mike gaunt, michael.gaunt@wsp.com
+--#
+--# README: SQL script to grab commute trips through Abernathy Bridge
+--#-------- [[description]]
+--# *please use 80 character margins
+--# *please save as helpers_[[informative description]]
+--#
+--#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+--index=====================================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#contains full network link ids for abernathy bridge 
+#i think for 2021_Q4
+13674580744864 w 13674580744864527942
+16170741915355 E 16170741915355440261
+
+--make temptable============================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--query to make temp table 
+--need to feed it thru_trip table made from replica query
+create or replace temp table temp_unlisted_ab as
+select
+    activity_id, person_id, mode, travel_purpose, tour_type, previous_activity_type, trip_type, vehicle_type
+    ,origin_bgrp, origin_poly, flag_sa_origin
+    ,destination_bgrp, destination_poly, flag_sa_destination
+    ,network_link_ids_unnested
+    ,ROW_NUMBER ()
+    OVER (PARTITION BY activity_id) AS index
+    from replica-customer._d48ded622e745d9120443120b79c81a0aee797b2.anonev_DHMWOoOiU_PcNObL_tkA17Mma0LyWAQ2ZSlwD4sNjr4
+                          ,unnest(network_link_ids) as network_link_ids_unnested;
+
+--inspect===================================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+select *  from temp_unlisted_ab limit 5;
+select count(*) as count from (select distinct activity_id from temp_unlisted_ab); #unique activites on bridge
+select count(*) as count from (select distinct person_id from temp_unlisted_ab); #unique persons on bridge
+select count(*) as count from (select distinct person_id from temp_unlisted_ab where 1=1 and tour_type = 'COMMUTE'); #unique persons on bridge that commute
+select count(*) as count from temp_unlisted_ab where 1=1 and network_link_ids_unnested = '13674580744864527942';
+
+--calculate usage============================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+select count, count(*) as ttl_count from 
+(select person_id, count(*) as count from 
+(
+select person_id, network_link_ids_unnested, count(*) as count from temp_unlisted_ab  
+where 1=1 
+and network_link_ids_unnested in ('13674580744864527942', '16170741915355440261')
+and tour_type = 'COMMUTE'
+group by person_id, network_link_ids_unnested
+) group by person_id
+order by count desc)
+group by count
+
+--extra============================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+select mode, travel_purpose, tour_type, previous_activity_type, trip_type, vehicle_type, count(*) as count from temp_unlisted_ab  
+where 1=1 
+and network_link_ids_unnested in ('13674580744864527942', '16170741915355440261')
+and tour_type = 'COMMUTE'
+group by mode, travel_purpose, tour_type, previous_activity_type, trip_type, vehicle_type
+order by travel_purpose, tour_type
+limit 25
+
+
+
+
+
+
+select * from temp_unlisted_ab
+where 1=1 
+and person_id = '7894336253305128925'
+and network_link_ids_unnested = '13674580744864527942'
+
+
+
+
+9042 + 14615
+
+select * from temp_unlisted_ab  
+where 1=1 
+and network_link_ids_unnested in ('13674580744864527942', '16170741915355440261')
+and tour_type = 'COMMUTE'
+group by mode, travel_purpose, tour_type, previous_activity_type, trip_type, vehicle_type
+order by travel_purpose, tour_type
+limit 25
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

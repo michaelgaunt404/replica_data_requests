@@ -1,0 +1,479 @@
+---
+title: "Replica I205 Usage Analysis"
+subtitle: "Quantifying Corridor User's Bridge Usage Behavior"
+author: "Mike Gaunt"
+date: "`r Sys.Date()`"
+output: 
+  html_document:
+    toc: TRUE
+    toc_float:
+      collapsed: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  cache = FALSE, cache.lazy = FALSE, autodep = TRUE, warning = FALSE, 
+  message = FALSE, echo = F, dpi = 180,
+  fig.width = 5, fig.height = 2, echo = FALSE
+  )
+```
+
+<!--#general comments===========================================================
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# This is [[insert description here - what it does/solve]]
+#
+# By: mike gaunt, michael.gaunt@wsp.com
+#
+# README: [[insert brief readme here]]
+#-------- [[insert brief readme here]]
+#
+# *please use 80 character margins
+# *please go to https://pkgs.rstudio.com/flexdashboard/articles/layouts.html
+# to explore the different layouts available for the flexdashboard framework
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ -->
+
+<!--#library set-up=============================================================
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#content in this section should be removed if in production - ok for dev -->
+```{r}
+library(tidyverse)
+library(data.table)
+library(here)
+library(hms)
+library(lubridate)
+library(sf)
+library(mapview)
+library(plotly)
+```
+
+<!--#source helpers/utilities===================================================
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#content in this section should be removed if in production - ok for dev -->
+
+<!--#source data================================================================
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#content in this section should be removed if in production - ok for dev 
+#area to upload data with and to perform initial munging
+#please add test data here so that others may use/unit test these scripts -->
+
+## Data Load 
+```{r}
+portland_pnlact_agg = here("req_portland_205/data", "portland_pnlact_agg_2.csv") %>%  
+  fread() %>%  
+  mutate(network_link_ids_unnested = as.character(network_link_ids_unnested ))
+```
+
+```{r}
+index_link = data.frame(name = c('abernathy_w', "abernathy_e", "tualatin_w", "tualatin_e")
+           ,id = c('13674580744864527942', '16170741915355440261', '8441177935916242835', '7566041862080809780'))
+```
+
+```{r}
+portland_pnlact_agg_pro = portland_pnlact_agg %>%  
+  merge(index_link, by.x = "network_link_ids_unnested", by.y = "id")
+```
+
+```{r}
+trip_table = fread(here::here(here("req_portland_205/data", "trip_table.csv") ))
+```
+
+```{r}
+rate_df = data.frame(
+  start_time = c(0L,1L,2L,3L,4L,5L,6L,7L,8L,9L,10L,
+                 11L,12L,13L,14L,15L,16L,17L,18L,19L,20L,21L,22L,
+                 23L),
+        rate = c(0.55,0.55,0.55,0.55,0.55,1,1.9,1.9,
+                 1.9,1,0.65,0.65,0.65,1,1,1.65,2.2,2.2,1.65,1,0.65,
+                 0.65,0.65,0.55)
+)
+```
+
+```{r, echo=FALSE}
+links_t =  here("req_portland_205/data/data_20230222_130855", "replica_queried_network_links.gpkg") %>% 
+  read_sf() %>%  
+  filter(stableEdgeId %in% c('13674580744864', '16170741915355', '84411779359162', '75660418620808'))
+
+links_a =  here("req_portland_205/data/data_20230222_130430", "replica_queried_network_links.gpkg") %>% 
+  read_sf() %>%  
+  filter(stableEdgeId %in% c('13674580744864', '16170741915355', '84411779359162', '75660418620808'))
+
+links = bind_rows(
+  links_a
+  ,links_t
+)
+```
+
+
+### Inspect
+
+Bridge links used in query.
+```{r}
+links %>% mapview(lwd = 16)
+```
+
+Sample of query data, each record details an activity_id, person_id, and link attributes.
+This table contains duplicate activity_ids if an activity uses more than 1 bridge link.
+```{r}
+portland_pnlact_agg_pro %>%  
+  sample_n(10) %>% 
+  reactable::reactable()
+```
+
+Toll rates used for single bridge usage:
+```{r}
+temp_plot = rate_df %>%  
+  ggplot() + 
+  geom_col(aes(start_time, rate))
+
+ggplotly(temp_plot)
+```
+
+## Analysis Observations
+
+### Activity Based Metrics
+
+Number of unique bridge usages - calculated 2X ways, should be the same:
+```{r, echo=FALSE}
+#numbers should be the same
+portland_pnlact_agg_pro %>% count(count) 
+portland_pnlact_agg_pro %>% summarise(count = sum(count)) %>% reactable::reactable()
+```
+
+Number of activities that use at least one bridge:
+```{r, echo=FALSE}
+portland_pnlact_agg_pro %>% count(activity_id) %>%  nrow() 
+```
+
+Number of activities that use [1, 2, ...N] bridge links:
+```{r, echo=FALSE}
+portland_pnlact_agg_pro %>% 
+  count(activity_id, name = "Bridges Used") %>%  
+  count(`Bridges Used`, name = "count")  %>%  
+  mutate(pct = round(count/sum(count), 2))  %>% reactable::reactable()
+```
+
+Above table broken out by bridge usage link combinations. 
+```{r, echo=F}
+summary_bridge_by_activity = portland_pnlact_agg_pro %>%  
+  group_by(activity_id) %>%  
+  arrange(name) %>%
+  mutate(index = row_number()) %>%  
+  arrange(desc(index)) %>%  
+  ungroup() %>% 
+  pivot_wider(id_cols = activity_id, names_from = index,  values_from = name) %>%  
+  group_by(`1`, `2`, `3`) %>%
+  summarise(count = n()) %>%  
+  ungroup() %>%  
+  arrange( `3`, `2`)
+
+summary_bridge_by_activity %>%  
+  mutate(Bridge_Usage = case_when(
+    (is.na(`3`) & is.na(`2`))~"1 Bridges Used"
+    ,(is.na(`3`) & !is.na(`2`))~"2 Bridges Used"
+    ,T~"3 Bridges Used"
+  )) %>%  
+  select(Bridge_Usage, count, everything())  %>% reactable::reactable()
+
+```
+
+```{r}
+portland_pact_agg = portland_pnlact_agg_pro %>% 
+  group_by(activity_id, person_id) %>%  
+  summarise(bridge_usage = sum(count)) %>%  
+  ungroup() 
+
+# portland_pact_agg %>% summarise(total_bridge_usage = sum(bridge_usage)) 
+# portland_pact_agg %>% group_by(bridge_usage) %>% summarise(total_bridge_usage = n())  %>%  ungroup()
+```
+
+```{r}
+
+yolo = merge(
+  portland_pact_agg %>%  
+    group_by(person_id) %>%  
+    summarise(activites_bin = n()) 
+  ,portland_pact_agg %>%  
+    group_by(person_id) %>%  
+    summarise(bridge_uses = sum(bridge_usage)))
+
+yolo = yolo %>%  
+  group_by(activites_bin, bridge_uses) %>%  
+  summarise(persons = n()) %>%  
+  ungroup() %>%  
+  mutate(percent = round(persons/sum(persons), 2)) %>%  
+  mutate(bin_ttl_activites = activites_bin*persons) %>%  
+  mutate(bin_ttl_bridge_uses = bridge_uses*persons)
+
+# sum(yolo$persons)
+# sum(yolo$bin_ttl_activites)
+# sum(yolo$bin_ttl_bridge_uses)
+
+persons_per_activity = yolo %>% 
+  group_by(activites_bin) %>%  
+  summarise(persons = sum(persons)) %>%  
+  ungroup() %>% 
+  mutate(percent = 100*round(persons/sum(persons), 2))
+
+persons_per_bridge_uses = yolo %>% 
+  group_by(bridge_uses) %>%  
+  summarise(persons = sum(persons)) %>%  
+  ungroup() %>% 
+  mutate(percent = 100*round(persons/sum(persons), 2)
+         ,percent_cumm = cumsum(percent))
+
+bridge_uses_per_activity = yolo %>% 
+  group_by(activites_bin) %>%  
+  summarise(bin_ttl_bridge_uses = sum(bin_ttl_bridge_uses)) %>%  
+  ungroup() %>%  
+  mutate(percent = 100*round(bin_ttl_bridge_uses/sum(bin_ttl_bridge_uses), 2)
+         ,percent_cumm = cumsum(percent))
+  
+```
+
+Number of persons given activity count.
+```{r}
+temp_plot = persons_per_activity %>%  
+  ggplot() + 
+  geom_col(aes(activites_bin, persons ))
+
+persons_per_activity %>% reactable::reactable()
+
+ggplotly(temp_plot)
+```
+
+Number of persons given bridge usage count.
+```{r}
+temp_plot = persons_per_bridge_uses %>%  
+  ggplot() + 
+  geom_col(aes(bridge_uses , persons ))
+
+persons_per_bridge_uses %>% reactable::reactable()
+
+ggplotly(temp_plot)
+```
+
+Bridges used given activity count.
+```{r}
+temp_plot = bridge_uses_per_activity %>%  
+  ggplot() + 
+  geom_col(aes(activites_bin , bin_ttl_bridge_uses ))
+
+bridge_uses_per_activity %>% reactable::reactable()
+
+ggplotly(temp_plot)
+```
+
+### Person Based Metrics
+```{r}
+#process trip_table
+trip_table_por = trip_table %>%  
+  select(activity_id, person_id, start_time, end_time) %>%  
+  mutate(start_time = hms::as_hms(start_time)
+         ,end_time = hms::as_hms(end_time)
+         ,middle_time = hms::as_hms(start_time+(end_time-start_time)/2)) %>%  
+  mutate(start_time_h = hour(start_time)
+         ,end_time_h = hour(end_time)
+         ,middle_time_h = hour(middle_time))
+```
+
+```{r}
+# trip_table_por %>%  
+#   arrange(start_time) %>%  
+#   group_by(person_id ) %>%  
+#   filter(n() == 2) %>%  
+#   ungroup() %>%  
+#   arrange(person_id, start_time ) 
+
+```
+
+Distribution of activity start times.
+```{r}
+temp_plot = trip_table %>%  
+  mutate(count = 1
+         ,start_time = hms::as_hms(start_time)) %>%  
+  ggplot() + 
+  geom_histogram(aes(start_time), position = "dodge" )
+
+ggplotly(temp_plot)
+```
+
+Distribution of start time differences between subsequent trips.
+```{r}
+temp_data = trip_table_por %>%  
+  arrange(person_id, start_time) %>%  
+  group_by(person_id) %>%  
+  filter(n()!=1) %>% 
+  mutate(start_diff = as.numeric(start_time-lag(start_time))/3600) 
+
+temp_plot = temp_data %>%  
+  mutate(start_time_difference = start_diff) %>% 
+  ggplot() + 
+  geom_histogram(aes(start_diff), position = "dodge" )
+
+ggplotly(temp_plot)
+```
+
+```{r}
+#merge trip table to portland_pact_agg and rate
+merged_trip_count_cost = trip_table_por %>%  
+  merge(portland_pact_agg
+        ,by = c("activity_id", "person_id")) %>%  
+  pivot_longer(cols = ends_with("time")
+               ,names_to = "analysis"
+               ,values_to = "hour") %>%  
+  merge(rate_df
+        ,by.x = "hour", by.y = "start_time") %>%  
+  mutate(charged_amount = bridge_usage*rate)
+
+#aggregate to person 
+merged_trip_count_cost_agg = merged_trip_count_cost %>%  
+  group_by(analysis, person_id) %>%  
+  summarise(bridge_usage_ttl = sum(bridge_usage)
+            ,charged_amount_ttl = sum(charged_amount))
+```
+
+Distribution of activity toll costs.
+```{r}
+merged_trip_count_cost %>%  
+  mutate(count = 1) %>%  
+  ggplot() + 
+  geom_histogram(aes(charged_amount, fill = analysis), position = "dodge" )
+```
+
+Table of percent of persons paying less than or equal to $4.4.
+```{r}
+merged_trip_count_cost_agg %>%  
+  group_by(analysis) %>%  
+  summarise(percent_less_than_4.4 = mean(charged_amount_ttl<=4.4))
+```
+
+Distribution of total daily toll cost per person.
+```{r}
+temp_plot = merged_trip_count_cost_agg %>%  
+  filter(analysis == "end_time") %>%  
+  arrange(desc(charged_amount_ttl)) %>% 
+  mutate(count = 1) %>%  
+  ggplot() + 
+  geom_histogram(aes(charged_amount_ttl, fill = analysis), position = "dodge" )
+
+ggplotly(temp_plot)
+```
+
+Distribution of average bridge toll cost per person.
+```{r}
+temp_plot = merged_trip_count_cost_agg %>%  
+  filter(analysis == "end_time") %>%  
+  arrange(desc(charged_amount_ttl)) %>% 
+  mutate(count = 1) %>%  
+  ggplot() + 
+  geom_histogram(aes(charged_amount_ttl/bridge_usage_ttl, fill = analysis),position = "dodge" )
+
+ggplotly(temp_plot)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+```{r}
+merged_trip_count_cost_agg %>%  
+  group_by(analysis,
+           cost_bin = cut(charged_amount_ttl, c(0:10, 100), right = F)) %>% 
+  summarise(count = n()) %>%  
+  group_by(analysis) %>%  
+  mutate(pct = count/sum(count)) %>%  
+  ungroup() %>%  
+  ggplot() + 
+  geom_col(aes(cost_bin, count, fill = analysis), position = "dodge" )
+
+merged_trip_count_cost_agg %>%  
+  group_by(analysis, thresh_4 = charged_amount_ttl > 4) %>%  
+  summarise(count = n())
+
+
+```
+
+
+```{r}
+merged_trip_count_cost = trip_table_por %>%  
+  merge(portland_pact_agg
+        ,by = c("activity_id", "person_id")) %>%  
+  pivot_longer(cols = ends_with("time")
+               ,names_to = "analysis"
+               ,values_to = "hour") %>%  
+  merge(rate_df
+        ,by.x = "hour", by.y = "start_time") %>%  
+  mutate(charged_amount = bridge_usage*rate)
+
+merged_trip_count_cost_agg = merged_trip_count_cost %>%  
+  group_by(analysis, person_id) %>%  
+  summarise(bridge_usage_ttl = sum(bridge_usage)
+            ,charged_amount_ttl = sum(charged_amount))
+
+
+merged_trip_count_cost_agg %>%  
+  mutate(count = 1) %>%  
+  filter(charged_amount_ttl < 10) %>% 
+  ggplot() + 
+  geom_histogram(aes(charged_amount_ttl, fill = analysis), position = "dodge" )
+
+
+merged_trip_count_cost_agg %>%  
+  group_by(analysis,
+           cost_bin = cut(charged_amount_ttl, c(0:10, 100), right = F)) %>% 
+  summarise(count = n()) %>%  
+  group_by(analysis) %>%  
+  mutate(pct = count/sum(count)) %>%  
+  ungroup() %>%  
+  ggplot() + 
+  geom_col(aes(cost_bin, count, fill = analysis), position = "dodge" )
+
+merged_trip_count_cost_agg %>%  
+  group_by(analysis, thresh_4 = charged_amount_ttl > 4) %>%  
+  summarise(count = n())
+
+
+```
+
+
+
+<!--end-->
+
+
+
+
+
+
