@@ -54,18 +54,18 @@ library(replicaToolkitR)
 #content in this section should be removed if in production - ok for dev
 #area to upload data with and to perform initial munging
 
-query_network_trip_using_bbox(
-  bb_network_layer = 'req_portland_205/data/network_poly_tualatin.gpkg'
-  ,bb_sa_layer = 'req_portland_205/data/network_poly_tualatin.gpkg'
-  ,network_table = "replica-customer.northwest.northwest_2021_Q4_network_segments"
-  ,trip_table = "replica-customer.northwest.northwest_2021_Q4_thursday_trip"
-  ,customer_name = "replica-customer"
-  ,file_destination = "req_portland_205/data"
-  ,max_record = Inf
-  ,mode_type = c('PRIVATE_AUTO')
-  ,query_links = c("highway", "corridor", "road", "motorway", "motorway_link", "trunk"
-                   ,"primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link")
-)
+# query_network_trip_using_bbox(
+#   bb_network_layer = 'req_portland_205/data/network_poly_abernathy.gpkg'
+#   ,bb_sa_layer = 'req_portland_205/data/network_poly_abernathy.gpkg'
+#   ,network_table = "replica-customer.northwest.northwest_2021_Q4_network_segments"
+#   ,trip_table = "replica-customer.northwest.northwest_2021_Q4_thursday_trip"
+#   ,customer_name = "replica-customer"
+#   ,file_destination = "req_portland_205/data"
+#   ,max_record = Inf
+#   ,mode_type = c('PRIVATE_AUTO')
+#   ,query_links = c("highway", "corridor", "road", "motorway", "motorway_link", "trunk"
+#                    ,"primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link")
+# )
 
 #path set-up====================================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -77,7 +77,7 @@ location = 'req_portland_205/data'
 #this is the folder that the data is written to
 #it is a sub-folder to *file_destination* and will have a data_[datetime] format
 folder = 'data_20230222_130855'
-folder = 'data_20230222_130430'
+folder = 'data_20230227_132903_t'
 
 #process acquired data==========================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -264,3 +264,6 @@ export_agg_links(
 #   ,poi_list = poi_list
 #   ,origin_polys = acquired_sa_polys
 # )
+
+
+mapview(yolo)

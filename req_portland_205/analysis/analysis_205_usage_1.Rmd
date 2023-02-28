@@ -60,7 +60,8 @@ library(plotly)
 
 ## Data Load 
 ```{r}
-portland_pnlact_agg = here("req_portland_205/data", "portland_pnlact_agg_2.csv") %>%  
+portland_pnlact_agg = here("req_portland_205/data"
+                           ,"portland_pnlact_agg_20230227.csv") %>%  
   fread() %>%  
   mutate(network_link_ids_unnested = as.character(network_link_ids_unnested ))
 ```
@@ -117,8 +118,7 @@ Sample of query data, each record details an activity_id, person_id, and link at
 This table contains duplicate activity_ids if an activity uses more than 1 bridge link.
 ```{r}
 portland_pnlact_agg_pro %>%  
-  sample_n(10) %>% 
-  reactable::reactable()
+  sample_n(10)
 ```
 
 Toll rates used for single bridge usage:
@@ -147,8 +147,9 @@ portland_pnlact_agg_pro %>% count(activity_id) %>%  nrow()
 Number of unique bridge usages - calculated 2X ways, should be the same:
 ```{r, echo=FALSE}
 #numbers should be the same
-portland_pnlact_agg_pro %>% count(count) 
-portland_pnlact_agg_pro %>% summarise(count = sum(count)) 
+portland_pnlact_agg_pro %>% count() 
+#this wont work anymore as count of 2+ indicate it was duplicated across bridges
+# portland_pnlact_agg_pro %>% summarise(count = sum(count)) 
 ```
 
 Number of activities that use [1, 2, ...N] bridge links:
@@ -156,7 +157,7 @@ Number of activities that use [1, 2, ...N] bridge links:
 portland_pnlact_agg_pro %>% 
   count(activity_id, name = "Bridges Used") %>%  
   count(`Bridges Used`, name = "count")  %>%  
-  mutate(pct = round(count/sum(count), 2))  %>% reactable::reactable()
+  mutate(pct = round(count/sum(count), 2)) 
 ```
 
 Above table broken out by bridge usage link combinations. 
@@ -179,7 +180,7 @@ summary_bridge_by_activity %>%
     ,(is.na(`3`) & !is.na(`2`))~"2 Bridges Used"
     ,T~"3 Bridges Used"
   )) %>%  
-  select(Bridge_Usage, count, everything())  %>% reactable::reactable()
+  select(Bridge_Usage, count, everything())
 
 ```
 
@@ -266,7 +267,7 @@ temp_plot = bridge_uses_per_activity %>%
   ggplot() + 
   geom_col(aes(activites_bin , bin_ttl_bridge_uses ))
 
-bridge_uses_per_activity %>% reactable::reactable()
+bridge_uses_per_activity 
 
 ggplotly(temp_plot)
 ```
@@ -275,7 +276,7 @@ ggplotly(temp_plot)
 ```{r}
 #process trip_table
 trip_table_por = trip_table %>%  
-  select(activity_id, person_id, start_time, end_time) %>%  
+  select(activity_id, person_id, start_time, end_time, tour_type) %>%  
   mutate(start_time = hms::as_hms(start_time)
          ,end_time = hms::as_hms(end_time)
          ,middle_time = hms::as_hms(start_time+(end_time-start_time)/2)) %>%  
@@ -296,11 +297,12 @@ trip_table_por = trip_table %>%
 
 Distribution of activity start times.
 ```{r}
-temp_plot = trip_table %>%  
-  mutate(count = 1
-         ,start_time = hms::as_hms(start_time)) %>%  
+temp_plot = trip_table_por %>%  
+  mutate(count = 1) %>%  
+  group_by(tour_type, start_time_h) %>%  
+  summarise(count = sum(count)) %>% clipr::write_clip()
   ggplot() + 
-  geom_histogram(aes(start_time), position = "dodge" )
+  geom_col(aes(start_time_h, count, fill = tour_type), position = "dodge")
 
 ggplotly(temp_plot)
 ```
@@ -314,9 +316,13 @@ temp_data = trip_table_por %>%
   mutate(start_diff = as.numeric(start_time-lag(start_time))/3600) 
 
 temp_plot = temp_data %>%  
-  mutate(start_time_difference = start_diff) %>% 
+  mutate(start_time_difference = start_diff %>%  
+           gauntlet::floor_divide(1)
+         ,count = 1) %>% 
+  group_by(tour_type, start_time_difference) %>%  
+  summarise(count = sum(count)) %>% clipr::write_clip()
   ggplot() + 
-  geom_histogram(aes(start_diff), position = "dodge" )
+  geom_col(aes(start_time_difference, count, fill = tour_type))
 
 ggplotly(temp_plot)
 ```
@@ -405,6 +411,55 @@ merged_trip_count_cost_agg = merged_trip_count_cost %>%
 
 Distribution of activity toll costs.
 ```{r}
+temp_1 = merged_trip_count_cost %>%  
+  filter(analysis == "start_time_h") %>% 
+  mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount, .5)
+         ,count = 1) %>%  
+  group_by(charged_amount_ttl_bin) %>%
+  summarise(count = sum(count)) %>%  
+  ungroup() 
+
+temp_1 %>%  
+  merge(
+    data.frame(
+      charged_amount_ttl_bin = seq(0, max(temp_1$charged_amount_ttl_bin), .5)
+    ), all.y = T) %>%  
+  mutate(count = replace_na(count, 0)) %>% 
+  clipr::write_clip()
+
+
+
+temp_2 = merged_trip_count_cost %>%  
+  filter(analysis == "start_time_h") %>% 
+  mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount, .5)
+         ,count = 1) %>%  
+  group_by(tour_type, charged_amount_ttl_bin) %>%
+  summarise(count = sum(count)) %>%  
+  ungroup() 
+
+temp_2 %>%  
+  merge(
+    data.frame(
+      charged_amount_ttl_bin = seq(0, max(temp_1$charged_amount_ttl_bin), .5)
+    ), all.y = T) %>%  
+  complete(tour_type, charged_amount_ttl_bin) %>% 
+  mutate(count = replace_na(count, 0)) %>% 
+  clipr::write_clip()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 merged_trip_count_cost %>%  
   mutate(count = 1) %>%  
   ggplot() + 
