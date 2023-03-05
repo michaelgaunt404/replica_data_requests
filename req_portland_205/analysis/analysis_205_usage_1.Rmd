@@ -68,7 +68,7 @@ portland_pnlact_agg = here("req_portland_205/data"
 
 ```{r}
 index_link = data.frame(name = c('abernathy_w', "abernathy_e", "tualatin_w", "tualatin_e")
-           ,id = c('13674580744864527942', '16170741915355440261', '8441177935916242835', '7566041862080809780'))
+                        ,id = c('13674580744864527942', '16170741915355440261', '8441177935916242835', '7566041862080809780'))
 ```
 
 ```{r}
@@ -85,9 +85,9 @@ rate_df = data.frame(
   start_time = c(0L,1L,2L,3L,4L,5L,6L,7L,8L,9L,10L,
                  11L,12L,13L,14L,15L,16L,17L,18L,19L,20L,21L,22L,
                  23L),
-        rate = c(0.55,0.55,0.55,0.55,0.55,1,1.9,1.9,
-                 1.9,1,0.65,0.65,0.65,1,1,1.65,2.2,2.2,1.65,1,0.65,
-                 0.65,0.65,0.55)
+  rate = c(0.55,0.55,0.55,0.55,0.55,1,1.9,1.9,
+           1.9,1,0.65,0.65,0.65,1,1,1.65,2.2,2.2,1.65,1,0.65,
+           0.65,0.65,0.55)
 )
 ```
 
@@ -185,18 +185,6 @@ summary_bridge_by_activity %>%
 ```
 
 ```{r}
-#calculate bridge usage per person and activity
-portland_pact_agg = portland_pnlact_agg_pro %>% 
-  group_by(activity_id, person_id) %>%  
-  summarise(bridge_usage = sum(count)) %>%  
-  ungroup() 
-
-# portland_pact_agg %>% summarise(total_bridge_usage = sum(bridge_usage)) 
-# portland_pact_agg %>% group_by(bridge_usage) %>% summarise(total_bridge_usage = n())  %>%  ungroup()
-```
-
-```{r}
-
 yolo = merge(
   portland_pact_agg %>%  
     group_by(person_id) %>%  
@@ -212,10 +200,6 @@ yolo = yolo %>%
   mutate(percent = round(persons/sum(persons), 2)) %>%  
   mutate(bin_ttl_activites = activites_bin*persons) %>%  
   mutate(bin_ttl_bridge_uses = bridge_uses*persons)
-
-# sum(yolo$persons)
-# sum(yolo$bin_ttl_activites)
-# sum(yolo$bin_ttl_bridge_uses)
 
 persons_per_activity = yolo %>% 
   group_by(activites_bin) %>%  
@@ -245,7 +229,7 @@ temp_plot = persons_per_activity %>%
   ggplot() + 
   geom_col(aes(activites_bin, persons ))
 
-persons_per_activity %>% reactable::reactable()
+persons_per_activity 
 
 ggplotly(temp_plot)
 ```
@@ -256,7 +240,7 @@ temp_plot = persons_per_bridge_uses %>%
   ggplot() + 
   geom_col(aes(bridge_uses , persons ))
 
-persons_per_bridge_uses %>% reactable::reactable()
+persons_per_bridge_uses 
 
 ggplotly(temp_plot)
 ```
@@ -273,6 +257,26 @@ ggplotly(temp_plot)
 ```
 
 ### Person Based Metrics
+
+```{r}
+#calculate bridge usage per person and activity
+portland_pact_agg = portland_pnlact_agg_pro %>% 
+  group_by(activity_id, person_id) %>%  
+  summarise(bridge_usage = n()) %>%  
+  ungroup() 
+
+portland_pact_agg_pro = portland_pact_agg %>%  
+  group_by(person_id) %>%  
+  mutate(person_activities = n()) %>%  
+  ungroup() %>%  
+  mutate(person_activities_flag = case_when(
+    person_activities == 1~ "1"
+    ,person_activities != 1~ "2+"
+    ,T~"PROBLEM"
+  ))
+
+```
+
 ```{r}
 #process trip_table
 trip_table_por = trip_table %>%  
@@ -283,16 +287,6 @@ trip_table_por = trip_table %>%
   mutate(start_time_h = hour(start_time)
          ,end_time_h = hour(end_time)
          ,middle_time_h = hour(middle_time))
-```
-
-```{r}
-# trip_table_por %>%  
-#   arrange(start_time) %>%  
-#   group_by(person_id ) %>%  
-#   filter(n() == 2) %>%  
-#   ungroup() %>%  
-#   arrange(person_id, start_time ) 
-
 ```
 
 Distribution of activity start times.
@@ -328,7 +322,6 @@ ggplotly(temp_plot)
 ```
 
 #### Cost Projections
-
 ```{r}
 #merge trip table to portland_pact_agg and rate
 merged_trip_count_cost = trip_table_por %>%  
@@ -361,7 +354,7 @@ Table of percent of persons paying less than or equal to $4.4.
 ```{r}
 merged_trip_count_cost_agg %>%  
   group_by(analysis) %>%  
-  summarise(percent_less_than_4.4 = mean(charged_amount_ttl<=4.4))
+  summarise(percent_less_than_4.4 = mean(charged_amount_ttl<=4.4)) 
 ```
 
 Distribution of total daily toll cost per person.
@@ -403,16 +396,18 @@ merged_trip_count_cost = trip_table_por %>%
   mutate(charged_amount = bridge_usage*rate)
 
 #aggregate to person 
-merged_trip_count_cost_agg = merged_trip_count_cost %>%  
-  group_by(analysis, person_id, person_activities_flag) %>%  
+merged_trip_count_cost_agg_act = merged_trip_count_cost %>%  
+  filter(analysis == "start_time_h") %>% 
+  group_by(person_id, person_activities) %>%  
   summarise(bridge_usage_ttl = sum(bridge_usage)
             ,charged_amount_ttl = sum(charged_amount))
 ```
 
 Distribution of activity toll costs.
 ```{r}
+#cost per trip 
+#THIS CHECKS OUT!!!!!!!!!!!!!!!!
 temp_1 = merged_trip_count_cost %>%  
-  filter(analysis == "start_time_h") %>% 
   mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount, .5)
          ,count = 1) %>%  
   group_by(charged_amount_ttl_bin) %>%
@@ -424,11 +419,15 @@ temp_1 %>%
     data.frame(
       charged_amount_ttl_bin = seq(0, max(temp_1$charged_amount_ttl_bin), .5)
     ), all.y = T) %>%  
-  mutate(count = replace_na(count, 0)) %>% 
-  clipr::write_clip()
+  mutate(count = replace_na(count, 0)) 
 
+#PLOT: ACTIVITIES PER COST BIN 
+ggplot(temp_1
+       ,aes(charged_amount_ttl_bin, count)) +  
+  geom_col() 
 
-
+#cost per trip 
+#THIS CHECKS OUT!!!!!!!!!!!!!!!!
 temp_2 = merged_trip_count_cost %>%  
   filter(analysis == "start_time_h") %>% 
   mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount, .5)
@@ -443,86 +442,57 @@ temp_2 %>%
       charged_amount_ttl_bin = seq(0, max(temp_1$charged_amount_ttl_bin), .5)
     ), all.y = T) %>%  
   complete(tour_type, charged_amount_ttl_bin) %>% 
-  mutate(count = replace_na(count, 0)) %>% 
-  clipr::write_clip()
+  mutate(count = replace_na(count, 0)) 
 
+#PLOT: ACTIVITIES PER COST BIN BY TOUR TYPE
+ggplot(temp_2
+       ,aes(charged_amount_ttl_bin, count, fill = tour_type)) +  
+  geom_col() 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-merged_trip_count_cost %>%  
-  mutate(count = 1) %>%  
-  ggplot() + 
-  geom_histogram(aes(charged_amount, fill = analysis), position = "dodge" ) + 
-  facet_grid(rows = vars(person_activities_flag))
 ```
 
 Table of percent of persons paying less than or equal to $4.4.
 ```{r}
-merged_trip_count_cost_agg %>%  
-  group_by(analysis, person_activities_flag) %>%  
-  summarise(percent_less_than_4.4 = mean(charged_amount_ttl<=4.4))
+merged_trip_count_cost_agg_act %>%  
+  group_by( person_activities_flag ) %>%  
+  summarise(percent_less_than_4.4 = mean(charged_amount_ttl<=4.4)) %>% 
+  clipr::write_clip()
 ```
 
 Distribution of total daily toll cost per person.
 ```{r}
+temp_1_p = merged_trip_count_cost_agg_act %>%  
+  mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount_ttl, .1)) %>% 
+  group_by(person_activities, charged_amount_ttl_bin) %>%  
+  summarise(count = n())
 
-c(seq(0, 50, .5))
-
-
-temp_plot = merged_trip_count_cost_agg %>%  
-  mutate(charged_amount_ttl_bin = cut(charged_amount_ttl, c(seq(0, 50, .5))))
-  # filter(analysis == "end_time_h") %>%  
-  arrange(desc(charged_amount_ttl)) %>% 
-  mutate(count = 1) %>%  
-  ggplot() + 
-  geom_histogram(aes(charged_amount_ttl, fill = analysis), position = "dodge" )  + 
-  facet_grid(rows = vars(person_activities_flag))
-
-ggplotly(temp_plot)
-
-
+temp_1_prp = temp_1_p %>% 
+  merge(
+    .
+    ,data.frame(
+      charged_amount_ttl_bin = seq(0, max(temp_1_p$charged_amount_ttl_bin), .1)
+    ), all.y = T) %>%  
+  complete(person_activities, charged_amount_ttl_bin) %>% 
+  mutate(count = replace_na(count, 0)) %>%  
+  clipr::write_clip()
 
 
 
+temp_1_p = merged_trip_count_cost_agg_act %>%  
+  mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount_ttl, .1)) %>% 
+  group_by(charged_amount_ttl_bin) %>%  
+  summarise(count = n())
 
+temp_1_prp = temp_1_p %>% 
+  merge(
+    .
+    ,data.frame(
+      charged_amount_ttl_bin = seq(0, max(temp_1_p$charged_amount_ttl_bin), .1)
+    ), all.y = T) %>%  
+  # complete(person_activities_flag , charged_amount_ttl_bin) %>% 
+  mutate(count = replace_na(count, 0)) %>%  
+  clipr::write_clip()
 
-
-
-temp_plot = merged_trip_count_cost_agg %>%  
-  # head(10000) %>% 
-  mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount_ttl, .5)) %>%  
-  group_by(analysis, charged_amount_ttl_bin, person_activities_flag ) %>%  
-  summarise(count = n()) %>% 
-  # mutate(charged_amount_ttl_bin = cut(charged_amount_ttl, c(seq(0, 50, .5)))) %>% 
-  filter(analysis == "end_time_h") %>%
-  # arrange(desc(charged_amount_ttl)) %>% 
-  # mutate(count = 1) %>%  
-  ggplot() + 
-  geom_col(aes(charged_amount_ttl_bin,count
-               ,fill = person_activities_flag)) +
-  # geom_histogram(aes(charged_amount_ttl_bin, fill = analysis), position = "dodge" )  + 
-  facet_grid(rows = vars(person_activities_flag)
-             ,scales = "free")
-
-ggplotly(temp_plot)
-
-
-merged_trip_count_cost_agg %>%  
-  mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount_ttl, .5)) %>%  
-  group_by(analysis, person_activities_flag ) %>%  
-  summarise(mean = mean(charged_amount_ttl)
-            ,median = median(charged_amount_ttl)) 
 
 
 
@@ -543,33 +513,10 @@ ggplotly(temp_plot)
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+```{r}
+portland_pact_agg_pro_3 %>%  
+  mutate
+```
 
 
 
