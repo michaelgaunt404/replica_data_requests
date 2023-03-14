@@ -54,19 +54,19 @@ library(replicaToolkitR)
 #content in this section should be removed if in production - ok for dev
 #area to upload data with and to perform initial munging
 
-query_network_trip_using_bbox(
-  bb_network_layer = 'req_portland_barrier/data/project_locations_buffer_union.gpkg'
-  ,bb_sa_layer = 'req_portland_barrier/data/project_locations_buffer_union.gpkg'
-  ,network_table = "replica-customer.northwest.northwest_2021_Q4_network_segments"
-  ,trip_table = "replica-customer.northwest.northwest_2021_Q4_thursday_trip"
-  ,customer_name = "replica-customer"
-  ,file_destination = "req_portland_barrier/data"
-  ,max_record = Inf
-  ,mode_type = c('COMMERCIAL')
-  ,query_links = c("highway", "corridor", "road", "motorway", "motorway_link", "trunk"
-                   ,"primary", "primary_link" #, "secondary", "secondary_link", "tertiary", "tertiary_link"
-                   )
-)
+# query_network_trip_using_bbox(
+#   bb_network_layer = 'req_portland_barrier/data/project_locations_buffer_union.gpkg'
+#   ,bb_sa_layer = 'req_portland_barrier/data/project_locations_buffer_union.gpkg'
+#   ,network_table = "replica-customer.northwest.northwest_2021_Q4_network_segments"
+#   ,trip_table = "replica-customer.northwest.northwest_2021_Q4_thursday_trip"
+#   ,customer_name = "replica-customer"
+#   ,file_destination = "req_portland_barrier/data"
+#   ,max_record = Inf
+#   ,mode_type = c('COMMERCIAL')
+#   ,query_links = c("highway", "corridor", "road", "motorway", "motorway_link", "trunk"
+#                    ,"primary", "primary_link" #, "secondary", "secondary_link", "tertiary", "tertiary_link"
+#                    )
+# )
 
 #path set-up====================================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -79,7 +79,7 @@ location = 'req_portland_barrier/data'
 #it is a sub-folder to *file_destination* and will have a data_[datetime] format
 # folder = 'data_20230214_100944' #can probabably delete
 # folder = 'data_20230209_114811' #first data pull
-folder = 'data_20230302_144923' #most recent with larger network
+folder = 'data_20230302_144923_barrier' #most recent with larger network
 
 #process acquired data==========================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

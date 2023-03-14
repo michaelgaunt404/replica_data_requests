@@ -1,11 +1,3 @@
-
-
-
-
-
-
-
-
 select * from replica-customer._d48ded622e745d9120443120b79c81a0aee797b2.anon540fe727280dbc5ecbcb1defa28966ac6ee0bd867e3dd2ebca1f032288ecd8d2 limit 20;
 
 create or replace temp table temp_pre_pivot as
@@ -42,6 +34,8 @@ from temp_pre_pivot
 where activity_id = '4608095374466946019'
 order by activity_id, act_row_index
 
+
+--this is the table that the counts throught mult and just counts would come from I think
 create or replace temp table temp_intersection as
 select *, max(index_lead)
 OVER (PARTITION BY activity_id) as index_lead_check from 
@@ -57,6 +51,7 @@ from temp_pre_pivot
 order by activity_id, act_row_index;
 
 
+--AGG--aggregates all the locations through two intersections - this is one product from above 
 --if you want counts through multiple intersections that has to be an input 
 --im not includeing that here but it is required 
 select 
@@ -82,33 +77,38 @@ group by intersection_name, network_link_ids_unnested, last_intersection, last_l
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-select 
-intersection_name
-,network_link_ids_unnested as link_1
-,yolo as link_2
-,count(*) as count 
- from (select *
-,lead(network_link_ids_unnested, 1) 
-OVER (PARTITION BY activity_id order by row_index) as yolo
-from temp_pre_pivot 
-order by activity_id, row_index)
+--gets all links for different start stop link pairs - for the st_union and vis
+select
+DISTINCT
+first_link
+,first_intersection
+,last_link
+,last_intersection
+,act_row_index
+,int_row_index
+,network_link_ids_unnested
+,intersection_name
+from 
+(select * 
+,FIRST_VALUE(network_link_ids_unnested) 
+  OVER (PARTITION BY activity_id ORDER BY act_row_index
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as first_link
+,FIRST_VALUE(intersection_name) 
+  OVER (PARTITION BY activity_id ORDER BY act_row_index
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as first_intersection
+,LAST_VALUE(network_link_ids_unnested) 
+  OVER (PARTITION BY activity_id ORDER BY act_row_index
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as last_link
+,LAST_VALUE(intersection_name) 
+  OVER (PARTITION BY activity_id ORDER BY act_row_index
+    ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) as last_intersection
+from temp_intersection
 where 1=1 
-and row_index = 1
-group by intersection_name, network_link_ids_unnested, yolo
+and activity_id in (select activity_id from index_mult_int where count = 2)
+and index_lead_check = 1)
+
+
+
 
 
 

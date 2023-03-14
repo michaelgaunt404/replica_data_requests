@@ -62,15 +62,6 @@ single_car = data.table::data.table(
                   as.character %>%
                   str_trunc(14, "right", "")))
 
-big_network = bigrquery::bq_project_query(
-  customer_name
-  ,stringr::str_glue("select * from
-                     ({paste(str_glue('(select * from {network_links})'), collapse = ' union all ')});")
-) %>%
-  bq_table_download() %>%
-  st_as_sf(wkt = "geometry", crs = 4326) %>%
-  mutate(stableEdgeId = as.character(stableEdgeId) %>%
-           str_trunc(14, "right", ""))
 
 trajectory_single_car = big_network %>%
   merge(single_car,
@@ -102,6 +93,109 @@ temp %>%
   # st_jitter(.00001) %>%
   filter(link_2 == "17534896915849") %>%
   mapview(zcol = "count", lwd = "lwd_count")
+
+
+
+
+
+
+
+big_network = bigrquery::bq_project_query(
+  customer_name
+  ,stringr::str_glue("select * from
+                     ({paste(str_glue('(select * from {network_links})'), collapse = ' union all ')});")
+) %>%
+  bigrquery::bq_table_download() %>%
+  st_as_sf(wkt = "geometry", crs = 4326) %>%
+  mutate(stableEdgeId = as.character(stableEdgeId) %>%
+           str_trunc(14, "right", ""))
+
+sf::write_sf(big_network, here::here("req_portland_barrier/data/turn_counts", "big_network.shp"))
+
+big_network = sf::read_sf(here::here("req_portland_barrier/data/turn_counts", "big_network.shp"))
+
+agg_turn_counts = data.table::fread(
+  here::here("req_portland_barrier/data/turn_counts", "agg_turn_counts.csv")
+) %>%
+  mutate(across(c("first_link", "last_link"), ~.x %>%
+                  as.character %>%
+                  str_trunc(14, "right", "")))
+
+first_last_link_pair_list = data.table::fread(
+  here::here("req_portland_barrier/data/turn_counts", "first_last_link_pair_list.csv")
+) %>%
+  mutate(across(c("first_link", "last_link", "network_link_ids_unnested"), ~.x %>%
+                  as.character %>%
+                  str_trunc(14, "right", "")))
+
+temp = first_last_link_pair_list %>%
+  group_by(first_link, last_link) %>%
+  nest() %>%
+  mutate(connected_links = map(
+    data
+    ,~{
+      big_network %>%
+        filter(stableEdgeId %in% c(.x[["network_link_ids_unnested"]])) %>%
+        st_union() %>%
+        wellknown::sf_convert()
+    })) %>%
+  ungroup() %>%
+  unnest(cols = c("connected_links") ) %>%
+  select(!data) %>%
+  st_as_sf(wkt = "connected_links", crs = 4326) %>%
+  merge(agg_turn_counts
+        ,by = c("first_link", "last_link")) %>%
+  mutate(lwd_count = gauntlet::rescale_to(count, 16) %>%
+           dgt2()) %>%
+  merge(
+    big_network %>%
+      st_drop_geometry() %>%
+      select(stableEdgeId,first_link_name =  streetName, first_link_type = highway)
+    ,by.x = "first_link", by.y = "stableEdgeId"
+  ) %>%
+  merge(
+    big_network %>%
+      st_drop_geometry() %>%
+      select(stableEdgeId,last_link_name =  streetName, last_link_type = highway)
+    ,by.x = "last_link", by.y = "stableEdgeId"
+  ) %>%
+  arrange(first_link_name, last_link_name) %>%
+  select(starts_with("first")
+         ,starts_with("last")
+         ,everything()) %>%
+  mutate(link_index = str_glue("{first_link_name} - {first_link}"))
+
+combined_map = temp$link_index %>%
+  unique() %>%
+  sort() %>%
+  map(~{
+    temp %>%
+      filter(link_index == .x) %>%
+      mapview(zcol = "count"
+              ,lwd = "lwd_count"
+              ,layer.name = .x
+              ,homebutton = F)
+  }) %>%
+  reduce(`+`)
+
+combined_map_leaflet = combined_map@map %>%
+  leaflet::hideGroup(
+    c(
+      "14th Street - 76109652000363", "Main Street - 12876848107368"
+      ,"Main Street - 17061392881397", "McLoughlin Boulevard - 13555745704114"
+      ,"McLoughlin Boulevard - 80175845306818"
+    )
+  )
+
+combined_map_leaflet
+
+htmlwidgets::saveWidget(
+  combined_map_leaflet
+  ,file = here::here("req_portland_barrier/data/turn_counts", "oregon_city_turn_counts.html")
+)
+
+
+
 
 
 

@@ -24,7 +24,7 @@ library(here)
 #path set-up====================================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #content in this section should be removed if in production - ok for dev
-location = "req_portland_barrier/data"
+location = "req_portland_205/data"
 
 #source helpers/utilities=======================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -38,17 +38,14 @@ location = "req_portland_barrier/data"
 
 #make network poly==============================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-network_point_2 = mapedit::drawFeatures() %>%
-  st_transform(4326)
+network = mapedit::drawFeatures() %>%
+   st_transform(4326)
 
-network_point_1 = network_point_1 %>%  mapedit::editFeatures() %>%
-  st_transform(4326)
+network = network %>%  st_union()
 
-mapview(network_point_3) + mapview(network_point_1) + mapview(network_point_2)
+# temp = read_sf(here::here(location, "network_poly.gpkg"))
 
-temp = read_sf(here::here(location, "network_poly.gpkg"))
-
- write_sf(network_poly, here::here(location, "network_poly.gpkg"))
+write_sf(network, here::here(location, "network_poly_both_bridges_union.gpkg"))
 
 #main header====================================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -78,7 +75,6 @@ temp = read_sf(here::here(location, "network_poly.gpkg"))
    ,roads_2
  )
 
-
  roads = counties_sel$COUNTYFP %>%
    map(~{
      tigris::roads(state = 41
@@ -90,10 +86,6 @@ temp = read_sf(here::here(location, "network_poly.gpkg"))
  roads %>%
    filter(str_detect(FULLNAME, "Barlow|99")) %>%
    mapview()
-
-
-
-
 
 
  project_locations_points = bind_rows(
@@ -112,13 +104,14 @@ temp = read_sf(here::here(location, "network_poly.gpkg"))
 mapview( project_locations_buffer_union)
 
 
-
+location = "req_portland_barrier/data"
 write_sf(network_poly, here::here(location, "network_poly.gpkg"))
+read_sf(here::here(location, "network_poly.gpkg"))
 write_sf(project_locations_buffer_union, here::here(location, "project_locations_buffer_union.gpkg"))
 write_sf(project_locations_buffer, here::here(location, "project_locations_buffer.gpkg"))
+project_locations_buffer = read_sf(here::here(location, "project_locations_buffer.gpkg"))
+
 write_sf(network_poly, here::here(location, "network_poly.gpkg"))
-
-
 
 roads_sel = roads %>%
   st_filter(project_locations_buffer) %>%
@@ -129,3 +122,7 @@ roads_sel = roads %>%
 
 roads_sel_buf = roads_sel %>%
   quick_buffer(radius = 20)
+
+
+
+

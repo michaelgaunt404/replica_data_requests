@@ -1,0 +1,135 @@
+--#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--#
+--# By mike gaunt, michael.gaunt@wsp.com
+--#
+--# README SQL script to grab commute trips through Abernathy Bridge
+--#-------- [[description]]
+--# please use 80 character margins
+--# please save as helpers_[[informative description]]
+--#
+--#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+--index=====================================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#contains full network link ids for abernathy bridge 
+#i think for 2021_Q4
+--13674580744864 w 13674580744864527942
+--16170741915355 E 16170741915355440261
+
+--84411779359162 w 8441177935916242835
+--75660418620808 E 7566041862080809780
+
+select  from replica-customer._d48ded622e745d9120443120b79c81a0aee797b2.anonev_oYEw7ji1un75CWphadNR42GmR_0kuglc8TkBIRk_UCk limit 5;
+
+--make temptable============================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--query to make temp table 
+--need to feed it thru_trip table made from replica query
+create or replace temp table temp_unlisted_ab as
+select
+    activity_id, person_id, mode, travel_purpose, tour_type, previous_activity_type, trip_type, vehicle_type
+    ,start_time, start_local_hour, end_time, end_local_hour
+    ,origin_bgrp, origin_poly, flag_sa_origin
+    ,destination_bgrp, destination_poly, flag_sa_destination
+    ,network_link_ids_unnested
+    ,ROW_NUMBER ()
+    OVER (PARTITION BY activity_id) AS index_link_order
+    from replica-customer._d48ded622e745d9120443120b79c81a0aee797b2.anonev_oYEw7ji1un75CWphadNR42GmR_0kuglc8TkBIRk_UCk
+                          ,unnest(network_link_ids) as network_link_ids_unnested;
+
+--inspect===================================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+select   from temp_unlisted_ab limit 5;
+select count() as count from (select distinct activity_id from temp_unlisted_ab); #unique activites on bridge
+select count() as count from (select distinct person_id from temp_unlisted_ab); #unique persons on bridge
+select count() as count from (select distinct person_id from temp_unlisted_ab where 1=1 and tour_type = 'COMMUTE'); #unique persons on bridge that commute
+select count() as count from temp_unlisted_ab where 1=1 and network_link_ids_unnested = '13674580744864527942';
+
+--calculate usage mulitstep option========================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+--Agg person_link_act========================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+create or replace temp table temp_agg_person_link_act as
+select 
+from temp_unlisted_ab  
+where 1=1 
+and (start_local_hour = 6 and start_local_hour  9)
+and (end_local_hour = 6 and end_local_hour  9)
+and network_link_ids_unnested in ('13674580744864527942', '16170741915355440261', '8441177935916242835', '7566041862080809780')
+order by person_id, start_time, activity_id, index_link_order;
+
+--inspect===================================================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+select   from temp_agg_person_link_act limit 5;
+select count() as count from temp_agg_person_link_act;
+select count() as count from (select distinct activity_id from temp_agg_person_link_act); #unique activites on bridge
+select count() as count from (select distinct person_id from temp_agg_person_link_act); #unique persons on bridge
+select count() as count from (select distinct person_id from temp_agg_person_link_act where 1=1 and tour_type = 'COMMUTE'); #unique persons on bridge that commute
+
+
+--make person subset with two activities====================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+create or replace temp table temp_person_act_subset as
+select person_id, count() as count from (
+select distinct activity_id, person_id
+from temp_agg_person_link_act
+)
+group by person_id;
+
+
+--make person subset with two activities====================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  
+select distinct person_id from (
+(select  from (
+select  
+,count()
+    OVER (PARTITION BY activity_id) AS act_links
+,count()
+    OVER (PARTITION BY person_id) AS person_links
+from temp_agg_person_link_act
+where person_id in (select person_id from temp_person_act_subset where count = 2)
+order by person_id, start_time, activity_id, index_link_order)
+where person_links = 4)
+)
+
+
+--calculate usage window function option========================================================
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+--~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+create or replace temp table temp_agg_person_link_act_option_1 as
+select 
+activity_id, person_id, mode, travel_purpose, tour_type
+,network_link_ids_unnested, index_link_order
+,count() 
+    OVER (PARTITION BY activity_id) AS links_per_act
+,count() 
+    OVER (PARTITION BY person_id) AS links_per_person
+,count() 
+    OVER (PARTITION BY person_id, activity_id) AS acts_per_person
+from temp_unlisted_ab  
+where 1=1 
+and (start_local_hour = 6 and start_local_hour  9)
+and (end_local_hour = 6 and end_local_hour  9)
+and network_link_ids_unnested in ('13674580744864527942', '16170741915355440261', '8441177935916242835', '7566041862080809780')
+order by person_id, start_time, activity_id, index_link_order;
+
+select distinct person_id 
+from temp_agg_person_link_act_option_1
+where 1=1 
+and links_per_person = 4
+and links_per_act = 2;
+
+
+select links_per_person, acts_per_person, count() as count 
+from (
+select distinct person_id, links_per_person, acts_per_person
+from temp_agg_person_link_act_option_1
+)
+group by links_per_person, acts_per_person
+
+select  from temp_agg_person_link_act_option_1
+where person_id = '2390019745961217871'
