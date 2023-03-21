@@ -1,53 +1,67 @@
 
-crash = here::here(location, "KBell_HV_ClackMultWash_2016_2020_20220519.xlsx") %>%
+crash = here::here("req_portland_barrier/data"
+                   ,"KBell_HV_ClackMultWash_2016_2020_20220519.xlsx") %>%
   readxl::read_excel()
 
-crash %>%
-  select(starts_with("VHCL_EVNT_1")) %>%
-  unique() %>%
-  arrange(VHCL_EVNT_1_CD)
 
-crash %>%
-  select(starts_with("VHCL_EVNT_2")) %>%
-  unique() %>%
-  arrange(VHCL_EVNT_2_CD) %>%
-  clipr::write_clip()
+# crash %>%
+#   select(starts_with("VHCL_TYP")) %>%
+#   unique()
 
-crash %>%
+
+
+
+index_vchl_event = bind_rows(
+  crash %>%
+    select(starts_with("VHCL_EVNT_1")) %>%
+    unique() %>%
+    rename_with(~str_remove_all(.x, "_1"))
+  ,crash %>%
+    select(starts_with("VHCL_EVNT_2")) %>%
+    unique() %>%
+    rename_with(~str_remove_all(.x, "_2"))
+  ,crash %>%
+    select(starts_with("VHCL_EVNT_3")) %>%
+    unique() %>%
+    rename_with(~str_remove_all(.x, "_3"))
+) %>%
+  unique()
+
+index_crash_cause = bind_rows(
+  crash %>%
+    select(starts_with("CRASH_CAUSE_1")) %>%
+    unique() %>%
+    rename_with(~str_remove_all(.x, "_1")) %>%
+    mutate(across(everything(), as.character))
+  ,crash %>%
+    select(starts_with("CRASH_CAUSE_2")) %>%
+    unique() %>%
+    rename_with(~str_remove_all(.x, "_2")) %>%
+    mutate(across(everything(), as.character))
+  ,crash %>%
+    select(starts_with("CRASH_CAUSE_3")) %>%
+    unique() %>%
+    rename_with(~str_remove_all(.x, "_3")) %>%
+    mutate(across(everything(), as.character))
+) %>%
+  unique()
+
+index_vchl_cause = crash %>%
   select(starts_with("VHCL_CAUSE_1")) %>%
-  unique() %>%
-  arrange(VHCL_CAUSE_1_CD) %>%
-  clipr::write_clip()
+  unique()
 
-crash %>%
+index_mvmnt = crash %>%
   select(starts_with("MVMNT_")) %>%
-  unique() %>%
-  arrange(MVMNT_CD)   %>%
-  clipr::write_clip()
+  unique()
 
-crash %>%
-  select(starts_with("CRASH_CAUSE_1")) %>%
-  unique() %>%
-  arrange(CRASH_CAUSE_1_CD) %>%
-  clipr::write_clip()
-
-crash %>%
+index_collision_type = crash %>%
   select(starts_with("COLLIS_TYP")) %>%
-  unique() %>%
-  arrange(COLLIS_TYP_CD) %>%
-  clipr::write_clip()
+  unique()
 
-crash %>%
+index_crash_severity =  crash %>%
   select(starts_with("CRASH_SVRTY")) %>%
-  unique() %>%
-  arrange(CRASH_SVRTY_CD) %>%
-  clipr::write_clip()
+  unique()
 
-
-
-crash %>%
-  colnames() %>%
-  sort()
 
 
 

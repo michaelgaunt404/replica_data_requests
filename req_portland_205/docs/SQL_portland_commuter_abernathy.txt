@@ -28,7 +28,7 @@ select
     ,destination_bgrp, destination_poly, flag_sa_destination
     ,network_link_ids_unnested
     ,ROW_NUMBER ()
-    OVER (PARTITION BY activity_id) AS index
+    OVER (PARTITION BY activity_id) AS index_link_order
     from replica-customer._d48ded622e745d9120443120b79c81a0aee797b2.anonev_UFkAqeZRw8KnVuh85TmXvLevyINhJFlvuNRRTKJVdc4
                           ,unnest(network_link_ids) as network_link_ids_unnested;
 
