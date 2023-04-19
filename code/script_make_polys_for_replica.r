@@ -24,7 +24,7 @@ library(here)
 #path set-up====================================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 #content in this section should be removed if in production - ok for dev
-location = "req_nj/data"
+location = "req_detroit/data"
 
 #source helpers/utilities=======================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -41,11 +41,13 @@ location = "req_nj/data"
 network = mapedit::drawFeatures() %>%
    st_transform(4326)
 
-# network = network %>%  st_union()
+network %>%  mapview()
+
+network = network %>%  st_union()
 
 # temp = read_sf(here::here(location, "network_poly.gpkg"))
 
-write_sf(network, here::here(location, "nj_sm_studyarea.gpkg"))
+write_sf(network, here::here(location, "study_area_poly_20230418.gpkg"))
 
 #main header====================================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

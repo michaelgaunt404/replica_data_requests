@@ -55,8 +55,8 @@ library(replicaToolkitR)
 #area to upload data with and to perform initial munging
 
 # query_network_trip_using_bbox(
-#   bb_network_layer = 'req_detroit/data/network_poly_20230227.gpkg'
-#   ,bb_sa_layer = 'req_detroit/data/study_area_poly_20230227.gpkg'
+#   bb_network_layer = 'req_detroit/data/network_poly_20230418.gpkg'
+#   ,bb_sa_layer = 'req_detroit/data/study_area_poly_20230418.gpkg'
 #   ,network_table = "replica-customer.great_lakes.great_lakes_2021_Q4_network_segments"
 #   ,trip_table = "replica-customer.great_lakes.great_lakes_2021_Q4_thursday_trip"
 #   ,customer_name = "replica-customer"
@@ -80,7 +80,8 @@ location = 'req_detroit/data'
 # folder = 'data_20230214_100944' #can probabably delete
 # folder = 'data_20230209_114811' #first data pull
 # folder = 'data_20230215_113203' #most recent with larger network
-folder = 'data_20230227_092838' #using smaller network poly
+folder = 'data_20230419_095952'
+folder = 'data_20230418_154722'
 
 #process acquired data==========================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -131,21 +132,29 @@ poi_list = fread(
 replica_queried_network_links = read_sf(
   here(location, folder ,"replica_queried_network_links.gpkg"))
 
-acquired_sa_polys = read_sf(here(location,folder,"acquired_sa_polys.gpkg"))
+replica_queried_network_links_trunc = read_sf(
+  here(location, folder ,"replica_queried_network_links_trunc.gpkg"))
 
-replica_trip_origin_links = read_sf(
-  here(location, folder, "replica_trip_origin_links.gpkg"))
+
+
+# acquired_sa_polys = read_sf(here(location,folder,"acquired_sa_polys.gpkg"))
+#
+# replica_trip_origin_links = read_sf(
+#   here(location, folder, "replica_trip_origin_links.gpkg"))
 
 table_agg_by_link_subset_limited = fread(
   here(location, folder, "table_agg_by_link_subset_limited.csv"))
 
-# aggregate_network_links(
-#   location = location
-#   ,folder = folder
-#   ,auto_save = T
-#   ,agg_count_object = table_agg_by_link_subset_limited
-#   ,network_object = replica_queried_network_links
-# )
+table_agg_by_link_subset_limited %>%
+  filter(network_link_ids_unnested %in% c("17241912301067740036"))
+
+aggregate_network_links(
+  location = location
+  ,folder = folder
+  ,auto_save = T
+  ,agg_count_object = table_agg_by_link_subset_limited
+  ,network_object = replica_queried_network_links_trunc
+)
 
 aggregated_network_links = read_rds(
   here(location, folder, "aggregated_network_links.rds"))
@@ -274,14 +283,20 @@ static_vis_anlto = viz_static_ntwrk_map_anlto_grp(
   spatial_agg_object = aggregated_network_links
 )
 
-list(
-  list(static_vis_anlt, static_vis_anltpt, static_vis_anlto)
-  ,list("static_vis_anlt", "static_vis_anltpt", "static_vis_anlto")
-) %>%
-  pmap(~{
-    htmlwidgets::saveWidget(.x
-                            ,here(location, folder, "viz", str_glue("{.y}.html")))
-  })
+# htmlwidgets::saveWidget(
+#   static_vis_anlt
+#   ,here(location, folder, "viz", str_glue("static_vis_anlt.html")))
+#
+# list(
+#   list(static_vis_anlt#, static_vis_anltpt, static_vis_anlto
+#        )
+#   ,list("static_vis_anlt"#, "static_vis_anltpt", "static_vis_anlto"
+#         )
+# ) %>%
+#   pmap(~{
+#     htmlwidgets::saveWidget(.x
+#                             ,here(location, folder, "viz", str_glue("{.y}.html")))
+#   })
 
 htmlwidgets::saveWidget(static_vis_anlto@map
                         ,here(location, folder, "viz", str_glue("static_vis_anlto.html")))
