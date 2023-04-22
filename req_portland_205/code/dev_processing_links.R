@@ -1,4 +1,50 @@
 
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# This script contains a basic replicaToolkitR workflow.
+#
+# By: mike gaunt, michael.gaunt@wsp.com
+#
+# README: This is a basic workflow that contains all the general steps
+#-------- one will want to execute when acquiring data from Replica.
+#--------
+#-------- Reminder: This script is supposed to be barebones. ReplicaToolkitR
+#-------- suggests that you limit computation and variable creation to
+#-------- to scripts and/or `targets` and then load those variables into
+#-------- Rmakrdown or other data products.
+#
+# *please use 80 character margins
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+#library set-up=================================================================
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#content in this section should be removed if in production - ok for dev
+library(crosstalk)
+library(data.table)
+library(dplyr)
+library(forcats)
+library(gauntlet)
+library(here)
+library(leafem)
+library(leaflet)
+library(leaflet.extras2)
+library(log4r)
+library(magrittr)
+library(mapview)
+library(purrr)
+library(reactable)
+library(readr)
+library(sf)
+library(sfhotspot)
+library(SpatialKDE)
+library(stringr)
+library(tigris)
+library(tidyr)
+library(wellknown)
+
+library(replicaToolkitR)
+mapviewOptions(homebutton = F)
 
 
 robust_prompt_used = function(prompt) {
@@ -45,11 +91,58 @@ flatten_named_list <- function(lst, parent_name = "") {
   }
 }
 
+index_network_name_strip = c("Street", "Road", "Boulevard") %>%
+  paste0(collapse = "|")
 
 
+merge_cols <- function(data) {
+  tmp_colnames = colnames(select(data, starts_with("seq_")))
+
+  for (colname in tmp_colnames){
+    data = merge(data
+                 ,table_network_data_simp
+                 ,by.x = colname, by.y = "stableEdgeId") %>%
+      rename("{colname}_streetName" := "streetName")
+  }
+
+  tmp_colnames = colnames(select(data, ends_with("streetName")))
+
+  tmp_func = paste0("{", tmp_colnames, "}", collapse = "_") %>%
+    paste0("str_glue('", ., "')")
+
+  tmp_func_fl = paste0("{", tmp_colnames[c(1,length(tmp_colnames))], "}", collapse = "_") %>%
+    paste0("str_glue('", ., "')")
+
+  data = data %>%
+    mutate(mvmnt_desc = !!rlang::parse_expr(tmp_func)
+           ,mvmnt_desc_fl = !!rlang::parse_expr(tmp_func_fl))
+
+  return(data)
+}
 
 
+bind_cols_prefix = function(data, prefix = "seq_"){
 
+  tmp_colnames = colnames(select(data, starts_with(prefix))) %>%
+    gsub("_link.*", "\\1", .) %>%
+    unique() %>%
+    sort()
+
+  tmp_object = tmp_colnames %>%
+    map_df(~{
+      tmp = data %>%
+        select(mode, starts_with("mvmnt_desc"), starts_with(.x), count)  %>%
+        mutate(order = parse_number(.x))
+
+      colnames(tmp) = colnames(tmp) %>%
+        gsub(".*(streetName)", "\\1", .) %>%
+        gsub(".*(link_id)", "\\1", .)
+
+      return(tmp)
+    })
+
+  return(tmp_object)
+}
 
 
 
@@ -96,8 +189,7 @@ download_and_visualize_map <- function(network_table, trip_table, mode_type, cus
                       ,geometry) as flag_contains
                       from `{network_table}`
                       )
-                      where flag_contains = TRUE")
-  )
+                      where flag_contains = TRUE"))
 
   table_network_count = bigrquery::bq_table_nrow(table_network)
 
@@ -155,18 +247,9 @@ download_and_visualize_map <- function(network_table, trip_table, mode_type, cus
       return(tmp_list_named)
     })
 
-  link_selections %>%  saveRDS(here::here("req_portland_205/data", 'link_selections.rds'))
-
-  link_selections = readRDS(here::here("req_portland_205/data", 'link_selections.rds'))
+  link_selections_index_pro = paste0("'", sort(unique(link_selections_df$value)), "'", collapse = ", ")
 
 
-  link_selections_df = link_selections %>%
-    flatten() %>%
-    flatten_named_list() %>%
-    tidyr::separate(col = "name", into = c("intersection", "sequence"), sep = "\\.")
-
-
-  link_selections_index_pro = paste0("'", unique(link_selections_df$value), "'", collapse = ", ")
 
   table = bigrquery::bq_project_query(
     customer_name
@@ -179,8 +262,9 @@ where 1=1
 and mode in ('PRIVATE_AUTO')
 )
 where 1 = 1
-and network_links in ({link_selections_index_pro});")
-  )
+and network_links in ({link_selections_index_pro});"))
+
+bigrquery::bq_table_nrow(table)
 
 table_pro = bigrquery::bq_project_query(
   customer_name
@@ -191,85 +275,199 @@ activity_id,mode, network_links,vehicle_type, link_ord
 ,count(*)
     OVER (PARTITION BY activity_id) AS act_link_count
 from {replica_temp_tbl_name(table)}
-order by activity_id, link_ord;")
-)
+order by activity_id, link_ord;"))
 
-
+turning_links = bigrquery::bq_table_download(table_pro
+                                             ,page_size = 1000,
+                                             quiet = F)
 
 }
 
-table_network_data_simp = table_network_data %>%
-  select(stableEdgeId, streetName) %>%
-  mutate(streetName = replace_na(streetName, "NO_NAME"))
+turning_links %>%
+  filter(network_links == "8017584530681808495")
+
+here::here("req_portland_205/data", 'turning_links_20230419.csv') %>%
+  write_csv(turning_links, .)
 
 
-first = table_network_data %>%
-  select(stableEdgeId, highway, streetName, geometry) %>%
-  rename_with(~str_glue("seq_1_{.x}"))
 
-second = table_network_data %>%
-  select(stableEdgeId, highway, streetName, geometry) %>%
-  rename_with(~str_glue("seq_2_{.x}"))
+
+
+# link_selections %>%  saveRDS(here::here("req_portland_205/data", 'link_selections.rds'))
+
+# link_selections = readRDS(here::here("req_portland_205/data", 'link_selections.rds'))
+
+
+link_selections_df = link_selections %>%
+  flatten() %>%
+  flatten_named_list() %>%
+  tidyr::separate(col = "name", into = c("intersection", "sequence"), sep = "\\.")
+
+table_network_data %>%
+  filter(stableEdgeId %in% unique(link_selections_df$value)) %>%
+  st_as_sf(wkt = "geometry", crs = 4326) %>%
+  mapview()
+
 
 tl = here::here("req_portland_205/data", 'turning_links_20230419.csv') %>%
   fread() %>%
-  mutate(seq_ord = str_glue("seq_{seq_ord}"))
+  mutate(seq_ord = str_glue("seq_{seq_ord}_link_id"))
 
-mapviewOptions(homebutton = F)
+# table_network_data %>%  saveRDS(here::here("req_portland_205/data", 'table_network_data.rds'))
 
-##for two links
-{
-tmp_tl = tl %>%
-  filter(act_link_count == 2) %>%
-  arrange(activity_id, seq_ord) %>%
-  select(activity_id, mode, network_links, seq_ord)
+# table_network_data = readRDS(here::here("req_portland_205/data", 'table_network_data.rds'))
 
-tmp_tl_agg = tmp_tl %>%
-  pivot_wider(names_from = "seq_ord", values_from = "network_links") %>%
-  mutate(count = 1) %>%
-  group_by(mode, seq_1, seq_2) %>%
-  summarise(count = sum(count)) %>%
-  ungroup()
+table_network_data_simp = table_network_data %>%
+  select(stableEdgeId, streetName) %>%
+  mutate(streetName = replace_na(streetName, "NoName") %>%
+           str_remove_all(index_network_name_strip) %>%
+           str_trim())
 
-tmp_tl_agg_lng_agg = tmp_tl_agg %>%
-  pivot_longer(cols = c("seq_1", "seq_2")) %>%
-  merge(table_network_data %>%
-          select(stableEdgeId, highway, streetName, geometry), .
-        ,by.x = "stableEdgeId", by.y = "value") %>%
-  pivot_wider(cols = c("seq_1", "seq_2"))
-  st_as_sf(wkt = "geometry", crs = 4326)
+table_network_data %>%
+  filter(stableEdgeId == "8017584530681808495")
 
-  tmp_tl_agg_comb = tmp_tl_agg %>%
-    merge(., first, by.x = "seq_1", by.y = "seq_1_stableEdgeId") %>%
-    merge(., second, by.x = "seq_2", by.y = "seq_2_stableEdgeId") %>%
-    mutate(link = str_glue("{seq_1_streetName}_to_{seq_2_streetName}")) %>%
-    select(seq_2, seq_1, link,count ) %>%
-    pivot_longer(cols = c("seq_1", "seq_2")) %>%
-    merge(table_network_data %>%
-            select(stableEdgeId, highway, streetName, geometry), .
-          ,by.x = "stableEdgeId", by.y = "value") %>%
-    st_as_sf(wkt = "geometry", crs = 4326)
+link_sub %>%
+  filter(value == "8017584530681808495")
+
+tl %>%
+  filter(network_links == "8017584530681808495")
+
+tl_sub %>%
+  filter(network_links == "8017584530681808495")
+
+tl_sub %>%
+  ungroup() %>%
+  filter(network_links == "8017584530681808495"
+         ,seq_ord_rltv == 1
+         ,act_link_count == 3) %>%
+  pull(activity_id)
+  arrange(activity_id, seq_ord_rltv) %>%
+  head(1000) %>%  View()
 
 
-unique(tmp_tl_agg_comb$link) %>%
+x = unique(link_selections_df$intersection)[3]
+yolo = unique(link_selections_df$intersection) %>%
+  map_df(~{
+    link_sub = link_selections_df %>%
+      filter(intersection == x)
+
+    index_max_seq = max(parse_number(link_sub$sequence))
+
+    tl_sub = tl %>%
+      filter(network_links %in% link_sub$value) %>%
+      arrange(activity_id, seq_ord ) %>%
+      group_by(activity_id) %>%
+      mutate(seq_ord_rltv = row_number()) %>%
+      ungroup() %>%
+      group_by(activity_id) %>%
+      filter(n() == index_max_seq) %>%
+      ungroup()
+
+    index_order_checks = c(1:index_max_seq) %>%
+      map(~{
+        tl_sub %>%
+          filter(seq_ord_rltv == .x) %>%
+          filter(network_links %in% (link_sub %>%
+                                       filter(parse_number(sequence) == .x) %>%
+                                       pull(value))) %>%
+          pull(activity_id)
+      })
+
+    index_activity = index_order_checks[[1]]
+
+    for (i in 1:(index_max_seq-1)){
+      index_activity = intersect(index_activity, index_order_checks[[i+1]])
+    }
+
+    tl_sub_pro = tl_sub %>%
+      filter(activity_id %in% index_activity) %>%
+      group_by(activity_id) %>%
+      mutate(seq_ord = str_glue("seq_{row_number()}_link_id"))
+
+    tmp_tl = tl_sub_pro %>%
+      arrange(activity_id, seq_ord) %>%
+      select(activity_id, mode, network_links, seq_ord)
+
+    index_seq = unique(tmp_tl$seq_ord) %>%
+      sort()
+
+    tmp_tl_agg = tmp_tl %>%
+      pivot_wider(names_from = "seq_ord", values_from = "network_links") %>%
+      mutate(count = 1) %>%
+      group_by(mode, across(starts_with("seq_"))) %>%
+      summarise(count = sum(count)) %>%
+      ungroup()
+
+    tmp_tl_agg_comb_sf = tmp_tl_agg %>%
+      merge_cols() %>%
+      bind_cols_prefix() %>%
+      merge(table_network_data %>%
+              select(stableEdgeId, geometry), .
+            ,by.x = "stableEdgeId", by.y = "link_id") %>%
+      mutate(label = str_glue("<b>{mvmnt_desc_fl}</b><br>Full Link List: {mvmnt_desc}<br>Count: {count}<br>Street Name: {streetName}<br>Link Order: {order}")
+             ,order = as.factor(order)) %>%
+      st_as_sf(wkt = "geometry", crs = 4326) %>%
+      arrange(mvmnt_desc, count, order)
+  })y
+
+tmp_tl_agg_comb_sf %>%
+  mutate(order = as.factor(order)) %>%
+  st_jitter(.0001) %>%
+  mapview(zcol = "order"
+          ,label = "label"
+          ,color = hcl.colors(5, palette = "viridis"))
+
+
+yolo_2 = yolo %>%
+  mutate(glag_grp = str_glue("{mvmnt_desc}_{count}"))
+
+map = unique(yolo_2$glag_grp) %>%
   map(~{
-    tmp_tl_agg_comb %>%
-      filter(link == .x) %>%
-      mapview(zcol = "name", layer.name = .x)
+    yolo_2 %>%
+      filter(glag_grp  == .x) %>%
+      mutate(order = as.factor(order)) %>%
+      mapview(zcol = "order", layer.name = .x
+              ,label = "label"
+              ,color = hcl.colors(5, palette = "viridis")
+      )
   }) %>%
   reduce(`+`)
-}
+
+map@map %>%  htmlwidgets::saveWidget(here::here("req_portland_205/data", 'oregon_city_turn_counts_2023.html'))
+
+mapview(tmp_tl_agg_comb_sf
+        ,color = hcl.colors(5, palette = "viridis")
+        ,zcol = "order")
 
 
 
-##for two links
-{
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# unique(tl$act_link_count) %>%
+combined_link_mvmnts = c(4, 5) %>%
+  map_df(~{
   tmp_tl = tl %>%
-    filter(act_link_count == 3) %>%
+    filter(act_link_count == .x) %>%
     arrange(activity_id, seq_ord) %>%
     select(activity_id, mode, network_links, seq_ord)
 
-  index_seq = unique(tmp_tl$seq_ord)
+  index_seq = unique(tmp_tl$seq_ord) %>%
+    sort()
 
   tmp_tl_agg = tmp_tl %>%
     pivot_wider(names_from = "seq_ord", values_from = "network_links") %>%
@@ -278,52 +476,26 @@ unique(tmp_tl_agg_comb$link) %>%
     summarise(count = sum(count)) %>%
     ungroup()
 
-
-  merge_cols <- function(data) {
-
-    tmp_colnames = colnames(select(data, starts_with("seq_")))
-
-    for (colname in tmp_colnames){
-      data = merge(data
-                   ,table_network_data_simp
-                   ,by.x = colname, by.y = "stableEdgeId"
-                   ,suffixes = c("", paste0("_", colname)))
-        # rename("{colname}_streetName" = "streetName")
-      colnames(data) <- gsub(paste0("_", colname, "$"), paste0("_streetName"), colnames(data))
-
-      # merge(., table_network_data_simp, by.x = "seq_1", by.y = "stableEdgeId") %>%
-      #   rename("seq_1_streetName" = "streetName")
-    }
-    return(data)
-  }
-
-  tmp_tl_agg_comb = tmp_tl_agg %>%
-    merge_cols()
-    merge(., table_network_data_simp, by.x = "seq_1", by.y = "stableEdgeId") %>%
-      rename("seq_1_streetName" = "streetName") %>%
-      merge(., table_network_data_simp, by.x = "seq_2", by.y = "stableEdgeId") %>%
-      rename("seq_2_streetName" = "streetName") %>%
-      merge(., table_network_data_simp, by.x = "seq_3", by.y = "stableEdgeId") %>%
-      rename("seq_3_streetName" = "streetName") %>%
-      mutate(link = str_glue("{seq_1_streetName}_to_{seq_2_streetName}_to_{seq_3_streetName}")) %>%
-    select(link,count, starts_with("seq_")) %>%
-    pivot_longer(cols = starts_with("seq_")) %>%
+  tmp_tl_agg_comb_sf = tmp_tl_agg %>%
+    merge_cols() %>%
+    bind_cols_prefix() %>%
     merge(table_network_data %>%
-            select(stableEdgeId, highway, streetName, geometry), .
-          ,by.x = "stableEdgeId", by.y = "value") %>%
-    st_as_sf(wkt = "geometry", crs = 4326)
+            select(stableEdgeId, geometry), .
+          ,by.x = "stableEdgeId", by.y = "link_id") %>%
+    st_as_sf(wkt = "geometry", crs = 4326) %>%
+    arrange(mvmnt_desc, order)
 
-  unique(tmp_tl_agg_comb$link) %>%
-    map(~{
-      tmp_tl_agg_comb %>%
-        filter(link == .x) %>%
-        mapview(zcol = "name", layer.name = .x)
-    }) %>%
-    reduce(`+`)
-}
+})
 
 
-
+unique(combined_link_mvmnts$mvmnt_desc ) %>%
+  map(~{
+    combined_link_mvmnts %>%
+      filter(mvmnt_desc  == .x) %>%
+      mutate(order = as.factor(order)) %>%
+      mapview(zcol = "order", layer.name = .x)
+  }) %>%
+  reduce(`+`)
 
 
 
