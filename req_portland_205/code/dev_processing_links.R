@@ -1,25 +1,4 @@
 
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#
-# This script contains a basic replicaToolkitR workflow.
-#
-# By: mike gaunt, michael.gaunt@wsp.com
-#
-# README: This is a basic workflow that contains all the general steps
-#-------- one will want to execute when acquiring data from Replica.
-#--------
-#-------- Reminder: This script is supposed to be barebones. ReplicaToolkitR
-#-------- suggests that you limit computation and variable creation to
-#-------- to scripts and/or `targets` and then load those variables into
-#-------- Rmakrdown or other data products.
-#
-# *please use 80 character margins
-#
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-#library set-up=================================================================
-#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-#content in this section should be removed if in production - ok for dev
 library(crosstalk)
 library(data.table)
 library(dplyr)
@@ -145,41 +124,15 @@ bind_cols_prefix = function(data, prefix = "seq_"){
 }
 
 
-
-
-
-
-
-
-
-#' Download and visualize a map of the selected study area
-#'
-#' @param network_table Name of the network table in the bigquery project
-#' @param trip_table Name of the trip table in the bigquery project
-#' @param mode_type Character vector specifying the mode types to include in the analysis
-#' @param customer_name Name of the bigquery project
-#' @param jitter_factor A factor that determines how much the network data is jittered to improve visualization
-#' @return A mapview object showing the network data in the selected study area
-#'
-#' @examples
-download_and_visualize_map("replica-customer.northwest.northwest_2021_Q4_network_segments",
-                           "replica-customer.northwest.northwest_2021_Q4_thursday_trip",
-                           c('PRIVATE_AUTO'),
-                           "replica-customer",
-                           0.003)
-download_and_visualize_map <- function(network_table, trip_table, mode_type, customer_name, jitter_factor) {
-  jitter_factor = .003
-  mode_type_pro = paste0("'", mode_type, "'", collapse = ", ")
-
+view_replica_network = function(network_table
+                                ,customer_name){
   message("Please draw a study area that will be used to query Replica's roadway network...")
   message("Draw it as small and parsimonious as possible")
   message("You can draw mulitple, discrete objects if you wish")
 
   study_area = mapedit::drawFeatures() %>% st_transform(4326)
-
   study_area_wkt = wellknown::sf_convert(st_union(study_area))
 
-  # Query the network table for data in the selected study area
   table_network = bigrquery::bq_project_query(
     customer_name,
     stringr::str_glue("select * from (
@@ -200,6 +153,57 @@ download_and_visualize_map <- function(network_table, trip_table, mode_type, cus
   table_network_data = bigrquery::bq_table_download(table_network) %>%
     arrange(stableEdgeId)
 
+  return(table_network_data)
+}
+
+mvmnt_df = data.frame(
+  mvmnt_desc = c("int_15th_to_onramp205"
+                 ,"int_15th_to_99E"
+                 ,"into_99E_14th_main"
+                 ,"int_main_14th_99E")
+  ,ttl_seq = c(2, 2, 3, 3)
+)
+
+make_space_2 = function(with = "+", n = 50, c = "", last = T){
+  if (last){
+    paste0(rep(with, n), collapse = c) %>% paste0(., "\n")
+  } else {
+    paste0(rep(with, n), collapse = c) %>% paste0("\n", .)
+  }
+}
+
+# network_table = "replica-customer.northwest.northwest_2021_Q4_network_segments"
+# trip_table = "replica-customer.northwest.northwest_2021_Q4_thursday_trip"
+# mode_type = c('PRIVATE_AUTO')
+# customer_name = "replica-customer"
+# jitter_factor = 0.003
+
+
+
+#' Download and visualize a map of the selected study area
+#'
+#' @param network_table Name of the network table in the bigquery project
+#' @param trip_table Name of the trip table in the bigquery project
+#' @param mode_type Character vector specifying the mode types to include in the analysis
+#' @param customer_name Name of the bigquery project
+#' @param jitter_factor A factor that determines how much the network data is jittered to improve visualization
+#' @param mvmnt_df A dataframe containing movements to get data for
+#' @return A mapview object showing the network data in the selected study area
+#'
+#' @examples
+download_and_visualize_map("replica-customer.northwest.northwest_2021_Q4_network_segments",
+                           "replica-customer.northwest.northwest_2021_Q4_thursday_trip",
+                           c('PRIVATE_AUTO'),
+                           "replica-customer",
+                           0.003, mvmnt_df
+)
+download_and_visualize_map <- function(network_table, trip_table, mode_type, customer_name, jitter_factor) {
+  mode_type_pro = paste0("'", mode_type, "'", collapse = ", ")
+
+  table_network_data = view_replica_network(
+    network_table = network_table
+    ,customer_name = customer_name)
+
   table_network_data_sf =  table_network_data %>%
     st_as_sf(wkt = "geometry", crs = 4326)
 
@@ -208,11 +212,12 @@ download_and_visualize_map <- function(network_table, trip_table, mode_type, cus
   table_network_data_sf_jit = table_network_data_sf %>%
     st_jitter(factor = jitter_factor)
 
-  mapview(table_network_data_sf_jit)
+  mapview(table_network_data_sf_jit, zcol = "flags", burst = T)
 
   rejitter <- TRUE
   while (rejitter) {
-    jitter_decision <- readline(prompt="Do you want to rejitter the data? (T/F)")
+    jitter_decision = robust_prompt_used("change the jitter factor and reijitter")
+
     if (tolower(jitter_decision) == "t") {
       jitter_factor = prompt_jitter_factor()
       table_network_data_sf_jit = table_network_data_sf %>%
@@ -223,37 +228,75 @@ download_and_visualize_map <- function(network_table, trip_table, mode_type, cus
   }
 
 
-  link_selections = list(
-    intersection = c("int_15th_to_onramp205"
-                     ,"int_15th_to_99E"
-                     ,"into_99E_14th_main"
-                     ,"int_main_14th_99E")
-    ,index = c(2, 2, 3, 3)
-  ) %>%
-    pmap(~{
-      print(str_glue("Current intersection selection: {.x}"))
+  #sec: get and process links
+  {
+    link_selections = list(
+      mvmnt_df$mvmnt_desc
+      ,mvmnt_df$ttl_seq
+    ) %>%
+      pmap(~{
+        print(str_glue("{make_space_2()}Select links for: {.x}"))
+        tmp_list = list()
 
-      tmp_list = list()
-      for (i in 1:.y){
-        print(str_glue("Select: seq_{i}"))
-        tmp_list[[str_glue("seq_{i}")]] = table_network_data_sf_jit %>%
-          mapedit::selectFeatures() %>%
-          pull(stableEdgeId)
-        Sys.sleep(2)
+        for (i in 1:.y){
+          print(str_glue("Links for {i} movement..."))
+          tmp_list[[str_glue("seq_{i}")]] = table_network_data_sf_jit %>%
+            mapedit::selectFeatures() %>%
+            pull(stableEdgeId)
+          Sys.sleep(2)
+        }
+
+        tmp_list_named = setNames(list(tmp_list), .x)
+
+        return(tmp_list_named)
+      })
+
+    #manual functions
+    {
+      #manual save out and read in
+      # link_selections %>%  saveRDS(here::here("req_portland_205/data", 'link_selections.rds'))
+      # link_selections = readRDS(here::here("req_portland_205/data", 'link_selections.rds'))
       }
 
-      tmp_list_named = setNames(list(tmp_list), .x)
+    link_selections_df = link_selections %>%
+      flatten() %>%
+      flatten_named_list() %>%
+      tidyr::separate(col = "name", into = c("intersection", "sequence"), sep = "\\.")
 
-      return(tmp_list_named)
-    })
-
-  link_selections_index_pro = paste0("'", sort(unique(link_selections_df$value)), "'", collapse = ", ")
+    link_selections_index_pro = paste0("'", sort(unique(link_selections_df$value)), "'", collapse = ", ")
 
 
+    table_network_data_sf %>%
+      filter(stableEdgeId %in% unique(link_selections_df$value)) %>%
+      st_as_sf(wkt = "geometry", crs = 4326) %>%
+      mapview()
 
-  table = bigrquery::bq_project_query(
-    customer_name
-    ,stringr::str_glue("select * from
+    review_map = unique(link_selections_df$intersection) %>%
+      map(~{
+        link_selections_df %>%
+          filter(intersection == .x) %>%
+          merge(table_network_data_sf, .
+                ,by.x = "stableEdgeId", by.y = "value") %>%
+          mapview(zcol = "sequence", layer.name = .x
+                  # ,label = "label"
+                  ,color = hcl.colors(5, palette = "viridis")
+          )
+      }) %>%
+      reduce(`+`)
+
+    review_map
+
+    #need to have a check here if we want to reselect one of them by name
+
+  }
+
+  #sec: table query
+  {
+    #should be messages about what is going in
+
+    table = bigrquery::bq_project_query(
+      customer_name
+      ,stringr::str_glue("select * from
 (select * except(network_link_ids)
 ,ROW_NUMBER ()
     OVER (PARTITION BY activity_id) AS link_ord
@@ -280,33 +323,127 @@ order by activity_id, link_ord;"))
 turning_links = bigrquery::bq_table_download(table_pro
                                              ,page_size = 1000,
                                              quiet = F)
+  }
 
+  #sec: perform QC and processing operation
+  {
+  processed_mvmnt_links = unique(link_selections_df$intersection) %>%
+    map_df(~{
+      link_sub = link_selections_df %>%
+        filter(intersection == x)
+
+      index_max_seq = max(parse_number(link_sub$sequence))
+
+      tl_sub = tl %>%
+        filter(network_links %in% link_sub$value) %>%
+        arrange(activity_id, seq_ord ) %>%
+        group_by(activity_id) %>%
+        mutate(seq_ord_rltv = row_number()) %>%
+        ungroup() %>%
+        group_by(activity_id) %>%
+        filter(n() == index_max_seq) %>%
+        ungroup()
+
+      index_order_checks = c(1:index_max_seq) %>%
+        c(1:2) %>%
+        map(~{
+          tl_sub %>%
+            filter(seq_ord_rltv == .x) %>%
+            filter(network_links %in% (link_sub %>%
+                                         filter(parse_number(sequence) == .x) %>%
+                                         pull(value))) %>%
+            pull(activity_id)
+        })
+
+      index_activity = index_order_checks[[1]]
+
+      for (i in 1:(index_max_seq-1)){
+        index_activity = intersect(index_activity, index_order_checks[[i+1]])
+      }
+
+      tl_sub_pro = tl_sub %>%
+        filter(activity_id %in% index_activity) %>%
+        group_by(activity_id) %>%
+        mutate(seq_ord = str_glue("seq_{row_number()}_link_id"))
+
+      tmp_tl = tl_sub_pro %>%
+        arrange(activity_id, seq_ord) %>%
+        select(activity_id, mode, network_links, seq_ord)
+
+      index_seq = unique(tmp_tl$seq_ord) %>%
+        sort()
+
+      tmp_tl_agg = tmp_tl %>%
+        pivot_wider(names_from = "seq_ord", values_from = "network_links") %>%
+        mutate(count = 1) %>%
+        group_by(mode, across(starts_with("seq_"))) %>%
+        summarise(count = sum(count)) %>%
+        ungroup()
+
+      tmp_tl_agg_comb_sf = tmp_tl_agg %>%
+        merge_cols() %>%
+        bind_cols_prefix() %>%
+        merge(table_network_data %>%
+                select(stableEdgeId, geometry), .
+              ,by.x = "stableEdgeId", by.y = "link_id") %>%
+        mutate(label = str_glue("<b>{mvmnt_desc_fl}</b><br>Full Link List: {mvmnt_desc}<br>Count: {count}<br>Street Name: {streetName}<br>Link Order: {order}")
+               ,order = as.factor(order)) %>%
+        mutate(glag_grp = str_glue("{mvmnt_desc}_{count}")) %>%
+        st_as_sf(wkt = "geometry", crs = 4326) %>%
+        arrange(mvmnt_desc, count, order)
+    }, .progress = "Perfroming intersection quality checks")
+  }
+
+  return(processed_mvmnt_links)
 }
 
-turning_links %>%
-  filter(network_links == "8017584530681808495")
-
-here::here("req_portland_205/data", 'turning_links_20230419.csv') %>%
-  write_csv(turning_links, .)
 
 
 
 
 
-# link_selections %>%  saveRDS(here::here("req_portland_205/data", 'link_selections.rds'))
-
-# link_selections = readRDS(here::here("req_portland_205/data", 'link_selections.rds'))
 
 
-link_selections_df = link_selections %>%
-  flatten() %>%
-  flatten_named_list() %>%
-  tidyr::separate(col = "name", into = c("intersection", "sequence"), sep = "\\.")
+map = unique(yolo_2$glag_grp) %>%
+  map(~{
+    yolo_2 %>%
+      filter(glag_grp  == .x) %>%
+      mutate(order = as.factor(order)) %>%
+      mapview(zcol = "order", layer.name = .x
+              ,label = "label"
+              ,color = hcl.colors(5, palette = "viridis")
+      )
+  }) %>%
+  reduce(`+`)
 
-table_network_data %>%
-  filter(stableEdgeId %in% unique(link_selections_df$value)) %>%
-  st_as_sf(wkt = "geometry", crs = 4326) %>%
-  mapview()
+
+
+
+
+
+# items = turning_links %>%
+#   filter(network_links == "8017584530681808495"
+#          ,seq_ord == 1) %>%  pull(activity_id)
+#
+# item_1 = turning_links %>%
+#   filter(network_links == "8017584530681808495"
+#          ,seq_ord == 1) %>%  pull(activity_id)
+#
+# item_2 = turning_links %>%
+#   filter((network_links == "16808743366416082416" |
+#             network_links == "2795330410658213329")
+#          ,seq_ord == 2) %>%  pull(activity_id)
+#
+# intersect(items, item_2)
+#
+# here::here("req_portland_205/data", 'turning_links_20230419.csv') %>%
+#   write_csv(turning_links, .)
+
+
+
+
+
+
 
 
 tl = here::here("req_portland_205/data", 'turning_links_20230419.csv') %>%
@@ -333,7 +470,15 @@ tl %>%
   filter(network_links == "8017584530681808495")
 
 tl_sub %>%
-  filter(network_links == "8017584530681808495")
+  filter(network_links == "8017584530681808495") %>%
+  count(network_links, act_link_count, seq_ord_rltv)
+
+tl_sub %>%
+  filter(network_links == "8017584530681808495") %>%
+  filter(act_link_count == 2)
+
+tl_sub %>%
+  filter(activity_id == "12043381266702287857" )
 
 tl_sub %>%
   ungroup() %>%
@@ -346,69 +491,7 @@ tl_sub %>%
 
 
 x = unique(link_selections_df$intersection)[3]
-yolo = unique(link_selections_df$intersection) %>%
-  map_df(~{
-    link_sub = link_selections_df %>%
-      filter(intersection == x)
 
-    index_max_seq = max(parse_number(link_sub$sequence))
-
-    tl_sub = tl %>%
-      filter(network_links %in% link_sub$value) %>%
-      arrange(activity_id, seq_ord ) %>%
-      group_by(activity_id) %>%
-      mutate(seq_ord_rltv = row_number()) %>%
-      ungroup() %>%
-      group_by(activity_id) %>%
-      filter(n() == index_max_seq) %>%
-      ungroup()
-
-    index_order_checks = c(1:index_max_seq) %>%
-      map(~{
-        tl_sub %>%
-          filter(seq_ord_rltv == .x) %>%
-          filter(network_links %in% (link_sub %>%
-                                       filter(parse_number(sequence) == .x) %>%
-                                       pull(value))) %>%
-          pull(activity_id)
-      })
-
-    index_activity = index_order_checks[[1]]
-
-    for (i in 1:(index_max_seq-1)){
-      index_activity = intersect(index_activity, index_order_checks[[i+1]])
-    }
-
-    tl_sub_pro = tl_sub %>%
-      filter(activity_id %in% index_activity) %>%
-      group_by(activity_id) %>%
-      mutate(seq_ord = str_glue("seq_{row_number()}_link_id"))
-
-    tmp_tl = tl_sub_pro %>%
-      arrange(activity_id, seq_ord) %>%
-      select(activity_id, mode, network_links, seq_ord)
-
-    index_seq = unique(tmp_tl$seq_ord) %>%
-      sort()
-
-    tmp_tl_agg = tmp_tl %>%
-      pivot_wider(names_from = "seq_ord", values_from = "network_links") %>%
-      mutate(count = 1) %>%
-      group_by(mode, across(starts_with("seq_"))) %>%
-      summarise(count = sum(count)) %>%
-      ungroup()
-
-    tmp_tl_agg_comb_sf = tmp_tl_agg %>%
-      merge_cols() %>%
-      bind_cols_prefix() %>%
-      merge(table_network_data %>%
-              select(stableEdgeId, geometry), .
-            ,by.x = "stableEdgeId", by.y = "link_id") %>%
-      mutate(label = str_glue("<b>{mvmnt_desc_fl}</b><br>Full Link List: {mvmnt_desc}<br>Count: {count}<br>Street Name: {streetName}<br>Link Order: {order}")
-             ,order = as.factor(order)) %>%
-      st_as_sf(wkt = "geometry", crs = 4326) %>%
-      arrange(mvmnt_desc, count, order)
-  })y
 
 tmp_tl_agg_comb_sf %>%
   mutate(order = as.factor(order)) %>%

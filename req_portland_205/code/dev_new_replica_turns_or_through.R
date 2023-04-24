@@ -16,6 +16,7 @@ network_table = "replica-customer.northwest.northwest_2021_Q4_network_segments"
 trip_table = "replica-customer.northwest.northwest_2021_Q4_thursday_trip"
 mode_type = c('PRIVATE_AUTO')
 customer_name = "replica-customer"
+jitter_factor = 0.003
 
 ##actual_function===============================================================
 #~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
