@@ -55,17 +55,17 @@ library(replicaToolkitR)
 #area to upload data with and to perform initial munging
 
 # query_network_trip_using_bbox(
-#   bb_network_layer = 'req_detroit/data/network_poly_20230418.gpkg'
-#   ,bb_sa_layer = 'req_detroit/data/study_area_poly_20230418.gpkg'
+  # bb_network_layer = 'req_detroit/data/network_poly_20230418.gpkg'
+  # ,bb_sa_layer = 'req_detroit/data/study_area_poly_20230418.gpkg'
 #   ,network_table = "replica-customer.great_lakes.great_lakes_2021_Q4_network_segments"
 #   ,trip_table = "replica-customer.great_lakes.great_lakes_2021_Q4_thursday_trip"
 #   ,customer_name = "replica-customer"
 #   ,file_destination = "req_detroit/data"
 #   ,max_record = Inf
 #   ,mode_type = c('COMMERCIAL')
-#   ,query_links = c("highway", "corridor", "road", "motorway", "motorway_link", "trunk"
-#                    ,"primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link"
-#                    ,"residential")
+  # ,query_links = c("highway", "corridor", "road", "motorway", "motorway_link", "trunk"
+  #                  ,"primary", "primary_link", "secondary", "secondary_link", "tertiary", "tertiary_link"
+  #                  ,"residential")
 # )
 
 #path set-up====================================================================

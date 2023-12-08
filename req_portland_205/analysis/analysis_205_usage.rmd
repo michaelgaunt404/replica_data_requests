@@ -440,10 +440,6 @@ ggplotly(temp_plot)
 
 
 
-
-
-
-
 temp_plot = merged_trip_count_cost_agg %>%  
   # head(10000) %>% 
   mutate(charged_amount_ttl_bin = gauntlet::floor_divide(charged_amount_ttl, .5)) %>%  

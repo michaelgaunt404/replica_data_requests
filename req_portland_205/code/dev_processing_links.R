@@ -1,3 +1,38 @@
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+#
+# This is script looked like it was used to develop the mvmnt_query
+#
+# By: mike gaunt, michael.gaunt@wsp.com
+#
+# README: last checked 20231012
+#-------- appears to have made it into replicaToolkitR
+#-------- see query_replica_mvmnt_patterns.r
+#
+# *please use 80 character margins
+#
+#~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 library(crosstalk)
 library(data.table)
@@ -164,6 +199,8 @@ mvmnt_df = data.frame(
   ,ttl_seq = c(2, 2, 3, 3)
 )
 
+
+
 make_space_2 = function(with = "+", n = 50, c = "", last = T){
   if (last){
     paste0(rep(with, n), collapse = c) %>% paste0(., "\n")
@@ -178,7 +215,7 @@ make_space_2 = function(with = "+", n = 50, c = "", last = T){
 # customer_name = "replica-customer"
 # jitter_factor = 0.003
 
-
+replicaToolkitR::down
 
 #' Download and visualize a map of the selected study area
 #'
