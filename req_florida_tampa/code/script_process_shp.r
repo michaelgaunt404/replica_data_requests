@@ -53,6 +53,11 @@ shapefiles = files %>%
       mutate(location = gsub("\\.shp", "\\1", .x))
   })
 
+sf::write_sf(
+  shapefiles
+  ,here::here(path, "facility_shp.gpkg")
+)
+
 
 
 mapview(shapefiles, zcol = "location", burst = T)
